@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Live Vacancy Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="https://js.arcgis.com/4.29/esri/themes/light/main.css" />
+  <script src="https://js.arcgis.com/4.29/"></script>
+  <style>
+    html, body, #viewDiv { height: 100%; margin: 0; padding: 0; }
+    #controls {
+      position: absolute;
+      top: 10px; left: 10px; z-index: 99;
+      background: white; padding: 12px; border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.2); font-family: sans-serif;
+      width: 250px;
+    }
+    label { display: block; margin: 10px 0 5px; }
+    .range-container {
+      display: flex; gap: 10px; align-items: center;
+    }
+    input[type="range"] { width: 100%; }
+  </style>
+</head>
+<body>
+  <div id="controls">
+    <label>Neighborhood:
+      <select id="neighborhoodSelect"><option value="All">All</option></select>
+    </label>
+    <label>Has Vacancy:
+      <select id="vacancySelect"><option value="All">All</option></select>
+    </label>
+    <label>Size Range (sqft):
+      <div class="range-container">
+        <input type="number" id="minSize" value="0" style="width: 60px;" /> –
+        <input type="number" id="maxSize" value="10000" style="width: 60px;" />
+      </div>
+    </label>
+    <button onclick="applyFilters()">Apply Filters</button>
+  </div>
+  <div id="viewDiv"></div>
+
+  <script>
+    require([
+      "esri/config",
+      "esri/WebMap",
+      "esri/views/MapView",
+      "esri/Graphic",
+      "esri/layers/FeatureLayer"
+    ], function(esriConfig, WebMap, MapView, Graphic, FeatureLayer) {
+
+      // Optional if you use a custom portal
+      // esriConfig.portalUrl = "https://maps.centercityphila.org/portal";
+
+      const webmap = new WebMap({
+        portalItem: {
+          id: "d07ddee9ac7d49fd9f1fcf59d7be7036" // Replace with your actual Web Map ID
+        }
+      });
+
+      const view = new MapView({
+        container: "viewDiv",
+        map: webmap
+      });
+
+      let propertiesLayer, businessesTable;
+
+      view.when(() => {
+        // Replace these with your actual layer/table names
+        propertiesLayer = webmap.layers.find(layer => layer.title === "Retail Properties");
+        businessesTable = webmap.tables.find(table => table.title === "Retail Survey Businesses");
+
+        if (!propertiesLayer || !businessesTable) {
+          console.error("Layers not found in Web Map");
+          return;
+        }
+
+        populateDropdowns();
+      });
+
+      function populateDropdowns() {
+        const q = propertiesLayer.createQuery();
+        q.returnDistinctValues = true;
+        q.outFields = ["Neighborhood", "HasVacancy"];
+        q.where = "1=1";
+
+        propertiesLayer.queryFeatures(q).then(res => {
+          const neighborhoods = new Set();
+          const vacancies = new Set();
+
+          res.features.forEach(f => {
+            neighborhoods.add(f.attributes["Neighborhood"]);
+            vacancies.add(f.attributes["HasVacancy"]);
+          });
+
+          for (const n of neighborhoods) addOption("neighborhoodSelect", n);
+          for (const v of vacancies) addOption("vacancySelect", v);
+        }).catch(err => {
+          console.error("Error querying distinct values:", err);
+        });
+      }
+
+      function addOption(selectId, value) {
+        if (value === null || value === undefined || value === "") return;
+        const select = document.getElementById(selectId);
+        const option = document.createElement("option");
+        option.value = value;
+        option.text = value;
+        select.appendChild(option);
+      }
+
+      window.applyFilters = function () {
+        const neighborhood = document.getElementById("neighborhoodSelect").value;
+        const hasVacancy = document.getElementById("vacancySelect").value;
+        const minSize = parseFloat(document.getElementById("minSize").value) || 0;
+        const maxSize = parseFloat(document.getElementById("maxSize").value) || 100000;
+
+        const whereClauses = [];
+        if (neighborhood !== "All") whereClauses.push(`Neighborhood = '${Neighborhood}'`);
+        if (hasVacancy !== "All") whereClauses.push(`HasVacancy = '${HasVacancy}'`);
+
+        const query = propertiesLayer.createQuery();
+        query.where = whereClauses.length ? whereClauses.join(" AND ") : "1=1";
+        query.outFields = ["*"];
+        query.returnGeometry = true;
+
+        propertiesLayer.queryFeatures(query).then(propertiesResult => {
+          const properties = propertiesResult.features;
+
+          const propMap = new Map();
+          properties.forEach(f => {
+            propMap.set(f.attributes["GlobalID"], f);
+          });
+
+          const bizQuery = businessesTable.createQuery();
+          bizQuery.where = `Size >= ${minSize} AND Size <= ${maxSize}`;
+          bizQuery.outFields = ["PropertyID", "Size"];
+
+          businessesTable.queryFeatures(bizQuery).then(bizResult => {
+            const matchedIDs = new Set(
+              bizResult.features.map(f => f.attributes["PropertyID"])
+            );
+
+            const filtered = properties.filter(p =>
+              matchedIDs.has(p.attributes["GlobalID"])
+            );
+
+            view.graphics.removeAll();
+
+            const graphics = filtered.map(f => new Graphic({
+              geometry: f.geometry,
+              attributes: f.attributes,
+              symbol: {
+                type: "simple-marker",
+                style: "circle",
+                size: 10,
+                color: [0, 120, 255, 0.8],
+                outline: { color: "white", width: 1 }
+              },
+              popupTemplate: propertiesLayer.popupTemplate
+            }));
+
+            view.graphics.addMany(graphics);
+          }).catch(err => {
+            console.error("Error querying businesses:", err);
+          });
+
+        }).catch(err => {
+          console.error("Error querying properties:", err);
+        });
+      };
+    });
+  </script>
+</body>
+</html>
