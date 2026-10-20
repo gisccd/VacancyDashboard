@@ -26,7 +26,7 @@ const CONFIG = {
     '<a href="mailto:research@centercityphila.org">research@centercityphila.org</a>.',
 
   center: [-75.1635, 39.9515],   // [longitude, latitude]
-  zoom: 15,
+  zoom: 14,
 
   // ---- Where the data comes from ----
   // The public ArcGIS Online web map. The page draws this web map as-is,
@@ -228,39 +228,39 @@ const CONFIG = {
   /* List */
   .list { flex: 1 0 auto; margin: 0; padding: 0; list-style: none; }
   .card {
-    display: grid; grid-template-columns: 12px 1fr; gap: 12px; width: 100%;
-    padding: 14px 20px; text-align: left; font: inherit; color: inherit; cursor: pointer;
-    background: none; border: 0; border-bottom: 1px solid var(--line);
+    display: grid; grid-template-columns: 12px 1fr; gap: 12px;
+    padding: 14px 20px; border-bottom: 1px solid var(--line);
   }
-  .card:hover { background: var(--mist); }
   .card[aria-current="true"] { background: var(--select); box-shadow: inset 3px 0 0 var(--teal); }
   .card .dot { width: 12px; height: 12px; margin-top: 5px; border-radius: 50%; background: var(--c); }
+  .card-main { min-width: 0; }
   .card .ttl { display: block; font-size: 1rem; font-weight: 600; }
   .card .sub { display: block; margin: 1px 0 6px; font-size: 0.875rem; color: var(--muted); }
   .card .broker { display: block; margin: 7px 0 0; font-size: 0.85rem; color: var(--muted); }
-  .size-txt { font-size: 0.875rem; font-variant-numeric: tabular-nums; }
+  .size-txt { display: block; font-size: 0.875rem; font-variant-numeric: tabular-nums; }
+
+  /* "+ See details" toggle and the details it reveals */
+  .card .more {
+    display: inline-block; margin-top: 10px; padding: 0;
+    font: inherit; font-size: 0.875rem; font-weight: 600; color: var(--teal-ink);
+    cursor: pointer; background: none; border: 0;
+  }
+  .card .more:hover { text-decoration: underline; text-underline-offset: 2px; }
+
+  .more-body { margin-top: 6px; }
+  .more-body dl {
+    display: grid; grid-template-columns: max-content 1fr; gap: 5px 16px;
+    margin: 0 0 12px; font-size: 0.9rem;
+  }
+  .more-body dl.contact-block { padding-top: 10px; border-top: 1px solid var(--line); }
+  .more-body dt { color: var(--muted); font-size: 0.85rem; }
+  .more-body dd { margin: 0; overflow-wrap: anywhere; }
+  .more-body a { color: var(--teal-ink); font-weight: 600; }
+  .more-body h3 { margin: 14px 0 6px; font-size: 0.9rem; }
+  .more-body .no-broker { margin: 0 0 12px; color: var(--muted); font-size: 0.9rem; }
 
   .empty { padding: 28px 20px; color: var(--muted); }
   .empty p { margin: 0 0 8px; }
-
-  /* Detail */
-  .detail { flex: 1 0 auto; padding: 16px 20px 24px; }
-  .detail .back { margin-bottom: 16px; }
-  .detail .type { display: flex; align-items: center; gap: 8px; font-size: 0.875rem; font-weight: 600; }
-  .detail .type .dot { width: 12px; height: 12px; border-radius: 50%; background: var(--c); }
-  .detail h2 { margin: 8px 0 2px; font-size: 1.45rem; line-height: 1.2; letter-spacing: -0.01em; }
-  .detail .hood { margin: 0 0 18px; color: var(--muted); }
-  .detail .size-big { margin: 0 0 20px; font-size: 1.15rem; font-weight: 600; font-variant-numeric: tabular-nums; }
-  .detail dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 0 0 14px; }
-  .detail dl.contact-block { padding-top: 12px; border-top: 1px solid var(--line); }
-  .detail dt { color: var(--muted); font-size: 0.875rem; }
-  .detail dd { margin: 0; }
-  .detail a { color: var(--teal-ink); font-weight: 600; }
-  .detail h3 { margin: 22px 0 8px; font-size: 0.95rem; }
-  .detail .no-broker { margin: 0 0 14px; color: var(--muted); font-size: 0.9rem; }
-
-  .panel.showing-detail .filters,
-  .panel.showing-detail .list { display: none; }
 
   .contact {
     padding: 12px 20px; font-size: 0.8rem; color: var(--muted);
@@ -340,7 +340,6 @@ const CONFIG = {
       </section>
 
       <ol class="list" id="list" aria-label="Available spaces"></ol>
-      <section class="detail" id="detail" hidden aria-label="Space details"></section>
 
       <footer class="contact" id="contact"></footer>
     </aside>
@@ -368,18 +367,17 @@ require([
 
   const F = CONFIG.fields, S = CONFIG.spaceFields, B = CONFIG.brokerFields;
   const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const narrow = () => window.matchMedia("(max-width: 820px)").matches;
 
   const $ = (id) => document.getElementById(id);
   const els = {
     title: $("title"), count: $("count"), panel: $("panel"), hood: $("hood"),
     genField: $("genField"), gen: $("gen"), types: $("types"), needMin: $("needMin"), needMax: $("needMax"),
-    reset: $("reset"), list: $("list"), detail: $("detail"), contact: $("contact"),
+    reset: $("reset"), list: $("list"), contact: $("contact"),
     legend: $("maplegend"), overlays: $("overlays")
   };
   if (CONFIG.title) els.title.textContent = CONFIG.title;
   else els.title.hidden = true;
-    const noteEl = document.getElementById("headerNote");
+  const noteEl = document.getElementById("headerNote");
   if (CONFIG.headerNote) { noteEl.innerHTML = CONFIG.headerNote; noteEl.hidden = false; }
 
   /* ---------- helpers ---------- */
@@ -422,7 +420,9 @@ require([
   /* ---------- state ---------- */
   const state = { hood: "", types: new Set(), needMin: null, needMax: null, gen: "", sort: "sizeDesc" };
   let records = [], filtered = [], byId = new Map();
-  let layerView, highlight = null, selectedId = null, listScroll = 0;
+  let layerView, highlight = null, selectedId = null;
+  // Properties whose details are open. Kept across filter changes and data refreshes.
+  const expanded = new Set();
   let layer = null, spacesTable = null, brokersTable = null;
   let lastLoad = 0, refreshing = false;
 
@@ -852,95 +852,9 @@ require([
       : `Showing ${n} of ${total} properties`;
   }
 
-  function cardHtml(r) {
-    const t = typeInfo(r.type);
-    const sub = [r.propertyName, r.hood, t.label].filter(Boolean).join(", ");
-    const extra = [];
-    if (r.spaces.length > 1) extra.push(`${r.spaces.length} vacant spaces`);
-    if (r.broker && r.broker.company) extra.push(r.broker.company);
-    return `<button type="button" class="card" data-id="${esc(r.id)}" style="--c:${t.color}"
-        aria-current="${r.id === selectedId}">
-      <span class="dot" aria-hidden="true"></span>
-      <span>
-        <span class="ttl">${esc(r.address)}</span>
-        <span class="sub">${esc(sub)}</span>
-        <span class="size-txt">${esc(sizeText(r))}</span>
-        ${extra.length ? `<span class="broker">${esc(extra.join(". "))}</span>` : ""}
-      </span>
-    </button>`;
-  }
-
-  function renderList() {
-    if (!filtered.length) {
-      els.list.innerHTML = `<li class="empty"><p>No properties match these filters.</p>
-        <button type="button" class="link-btn" data-action="reset">Clear filters</button></li>`;
-      return;
-    }
-    els.list.innerHTML = filtered.map((r) => `<li>${cardHtml(r)}</li>`).join("");
-  }
-
-  function syncMap() {
-    if (!layerView) return;
-    // Always filter by ID, so the map shows exactly the properties in the list.
-    if (filtered.length) layerView.filter = { objectIds: filtered.map((r) => r.id) };
-    else layerView.filter = { where: "1=0" };
-  }
-
-  function zoomToFiltered() {
-    if (!filtered.length) return;
-    view.goTo(filtered.map((r) => r.geometry), { animate: !reduceMotion, duration: 600 })
-      .then(() => { if (view.zoom > 17) view.zoom = 17; })
-      .catch(() => {});
-  }
-
-  function resetFilters() {
-    Object.assign(state, { hood: "", gen: "", needMin: null, needMax: null });
-    setGenButtons();
-    state.types.clear();
-    els.hood.value = ""; els.needMin.value = ""; els.needMax.value = "";
-    els.types.querySelectorAll(".chip").forEach((c) => c.setAttribute("aria-pressed", "false"));
-    apply();
-  }
-
-  /* ---------- selection & detail ---------- */
-  function setHighlight(id) {
-    if (highlight) { highlight.remove(); highlight = null; }
-    if (layerView && id != null) highlight = layerView.highlight(id);
-  }
-
-  function select(id, { zoom = false } = {}) {
-    const r = byId.get(id);
-    if (!r) return;
-    if (!els.panel.classList.contains("showing-detail")) listScroll = els.panel.scrollTop;
-    selectedId = id;
-    setHighlight(id);
-
-    renderDetail(r);
-    els.panel.classList.add("showing-detail");
-    els.detail.hidden = false;
-    els.panel.scrollTop = 0;
-    els.detail.querySelector(".back").focus({ preventScroll: true });
-
-    if (zoom) {
-      view.goTo({ target: r.geometry, zoom: Math.max(view.zoom, 17) },
-        { animate: !reduceMotion, duration: 600 }).catch(() => {});
-    }
-    if (narrow()) {
-      els.detail.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
-    }
-  }
-
-  function closeDetail() {
-    const prev = selectedId;
-    selectedId = null;
-    setHighlight(null);
-    els.panel.classList.remove("showing-detail");
-    els.detail.hidden = true;
-    renderList();
-    els.panel.scrollTop = listScroll;
-    const card = els.list.querySelector(`.card[data-id="${CSS.escape(String(prev))}"]`);
-    if (card) card.focus({ preventScroll: true });
-  }
+  /* ---------- cards with "+ See details" ---------- */
+  const SHOW_LABEL = "+ See details";
+  const HIDE_LABEL = "− Hide details";
 
   function brokerHtml(b) {
     const rows = [];
@@ -970,18 +884,115 @@ require([
       ${brokers}`;
   }
 
-  function renderDetail(r) {
+  // Everything that used to be on the separate detail screen.
+  function detailsHtml(r) {
+    if (!r.spaces.length) return `<p class="no-broker">Contact us below for details on this space.</p>`;
+    return r.spaces.map((sp, i) => spaceHtml(sp, i, r.spaces.length)).join("");
+  }
+
+  function cardHtml(r) {
     const t = typeInfo(r.type);
-    els.detail.innerHTML = `
-      <button type="button" class="link-btn back">Back to all properties</button>
-      <div class="type" style="--c:${t.color}"><span class="dot" aria-hidden="true"></span>${esc(t.label)}</div>
-      <h2>${esc(r.address)}</h2>
-      <p class="hood">${esc([r.propertyName, r.hood || "Neighborhood not listed"].filter(Boolean).join(", "))}</p>
-      <p class="size-big">${esc(sizeText(r))}</p>
-      ${r.spaces.length
-        ? r.spaces.map((sp, i) => spaceHtml(sp, i, r.spaces.length)).join("")
-        : `<p>Contact us below for details on this space.</p>`}
-    `;
+    const sub = [r.propertyName, r.hood, t.label].filter(Boolean).join(", ");
+    const extra = [];
+    if (r.spaces.length > 1) extra.push(`${r.spaces.length} vacant spaces`);
+    if (r.broker && r.broker.company) extra.push(r.broker.company);
+    const open = expanded.has(r.id);
+    const bodyId = `details-${esc(r.id)}`;
+    return `<article class="card" data-id="${esc(r.id)}" style="--c:${t.color}"
+        aria-current="${r.id === selectedId}">
+      <span class="dot" aria-hidden="true"></span>
+      <div class="card-main">
+        <span class="ttl">${esc(r.address)}</span>
+        <span class="sub">${esc(sub)}</span>
+        <span class="size-txt">${esc(sizeText(r))}</span>
+        ${extra.length ? `<span class="broker">${esc(extra.join(". "))}</span>` : ""}
+        <button type="button" class="more" aria-expanded="${open}" aria-controls="${bodyId}">${open ? HIDE_LABEL : SHOW_LABEL}</button>
+        <div class="more-body" id="${bodyId}" ${open ? "" : "hidden"}>${detailsHtml(r)}</div>
+      </div>
+    </article>`;
+  }
+
+  const cardEl = (id) => els.list.querySelector(`.card[data-id="${CSS.escape(String(id))}"]`);
+
+  function renderList() {
+    // Keep keyboard focus on the same toggle when the list is redrawn.
+    const active = document.activeElement;
+    const focusId = active && els.list.contains(active) && active.classList.contains("more")
+      ? active.closest(".card").dataset.id : null;
+
+    if (!filtered.length) {
+      els.list.innerHTML = `<li class="empty"><p>No properties match these filters.</p>
+        <button type="button" class="link-btn" data-action="reset">Clear filters</button></li>`;
+      return;
+    }
+    els.list.innerHTML = filtered.map((r) => `<li>${cardHtml(r)}</li>`).join("");
+
+    if (focusId != null) {
+      const card = cardEl(focusId);
+      if (card) card.querySelector(".more").focus({ preventScroll: true });
+    }
+  }
+
+  function syncMap() {
+    if (!layerView) return;
+    // Always filter by ID, so the map shows exactly the properties in the list.
+    if (filtered.length) layerView.filter = { objectIds: filtered.map((r) => r.id) };
+    else layerView.filter = { where: "1=0" };
+  }
+
+  function zoomToFiltered() {
+    if (!filtered.length) return;
+    view.goTo(filtered.map((r) => r.geometry), { animate: !reduceMotion, duration: 600 })
+      .then(() => { if (view.zoom > 17) view.zoom = 17; })
+      .catch(() => {});
+  }
+
+  function resetFilters() {
+    Object.assign(state, { hood: "", gen: "", needMin: null, needMax: null });
+    setGenButtons();
+    state.types.clear();
+    els.hood.value = ""; els.needMin.value = ""; els.needMax.value = "";
+    els.types.querySelectorAll(".chip").forEach((c) => c.setAttribute("aria-pressed", "false"));
+    apply();
+  }
+
+  /* ---------- selection & expanding details ---------- */
+  function setHighlight(id) {
+    if (highlight) { highlight.remove(); highlight = null; }
+    if (layerView && id != null) highlight = layerView.highlight(id);
+  }
+
+  // Marks one property as current: highlighted on the map and in the list.
+  function setSelected(id) {
+    selectedId = id;
+    setHighlight(id);
+    els.list.querySelectorAll(".card").forEach((c) =>
+      c.setAttribute("aria-current", String(id != null && c.dataset.id === String(id))));
+  }
+
+  // Opens or closes a card's details in place, without leaving the list.
+  function toggleDetails(id, { open = !expanded.has(id), zoom = false, scroll = false } = {}) {
+    const r = byId.get(id);
+    const card = cardEl(id);
+    if (!r || !card) return;
+
+    const btn = card.querySelector(".more");
+    const body = card.querySelector(".more-body");
+    if (open) expanded.add(id); else expanded.delete(id);
+    btn.setAttribute("aria-expanded", String(open));
+    btn.textContent = open ? HIDE_LABEL : SHOW_LABEL;
+    body.hidden = !open;
+
+    if (open) setSelected(id);
+    else if (selectedId === id) setSelected(null);
+
+    if (open && zoom) {
+      view.goTo({ target: r.geometry, zoom: Math.max(view.zoom, 17) },
+        { animate: !reduceMotion, duration: 600 }).catch(() => {});
+    }
+    if (scroll) {
+      card.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
+    }
   }
 
   /* ---------- live refresh ---------- */
@@ -993,14 +1004,13 @@ require([
       records = next;
       byId = new Map(records.map((r) => [r.id, r]));
       lastLoad = Date.now();
+      // Forget open cards for properties that are no longer listed.
+      [...expanded].forEach((id) => { if (!byId.has(id)) expanded.delete(id); });
+      if (selectedId != null && !byId.has(selectedId)) selectedId = null;
       buildFilterOptions();
       apply();
       layer.refresh();
-      if (selectedId != null) {
-        const r = byId.get(selectedId);
-        if (r) { renderDetail(r); setHighlight(selectedId); }
-        else closeDetail();
-      }
+      setHighlight(selectedId);
     } catch (err) {
       console.warn("Couldn't refresh listings; keeping the current ones.", err);
     } finally {
@@ -1055,25 +1065,37 @@ require([
 
   els.reset.addEventListener("click", resetFilters);
 
+  // Only the "+ See details" button opens a card; the rest of the card is plain text,
+  // so visitors can select and copy phone numbers and emails.
   els.list.addEventListener("click", (e) => {
     if (e.target.closest('[data-action="reset"]')) { resetFilters(); return; }
-    const card = e.target.closest(".card");
-    if (card) select(Number(card.dataset.id), { zoom: true });
+    const btn = e.target.closest(".more");
+    if (!btn) return;
+    toggleDetails(Number(btn.closest(".card").dataset.id), { zoom: true });
   });
 
-  els.detail.addEventListener("click", (e) => {
-    if (e.target.closest(".back")) closeDetail();
-  });
-
+  // Escape closes the details of the card that has focus (or the current one).
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && selectedId != null) closeDetail();
+    if (e.key !== "Escape") return;
+    const active = document.activeElement;
+    const card = active && active.closest ? active.closest(".card") : null;
+    const id = card ? Number(card.dataset.id) : selectedId;
+    if (id == null || !expanded.has(id)) return;
+    toggleDetails(id, { open: false });
+    const c = cardEl(id);
+    if (c) c.querySelector(".more").focus({ preventScroll: true });
   });
 
+  // Clicking a point on the map opens that property's details in the list.
   view.on("click", async (e) => {
     if (!layer) return;
     const res = await view.hitTest(e, { include: [layer] });
     const hit = res.results.find((h) => h.graphic && h.graphic.layer === layer);
-    if (hit) select(hit.graphic.attributes[layer.objectIdField]);
+    if (!hit) return;
+    const id = hit.graphic.attributes[layer.objectIdField];
+    toggleDetails(id, { open: true, scroll: true });
+    const c = cardEl(id);
+    if (c) c.querySelector(".more").focus({ preventScroll: true });
   });
 
   view.on("pointer-move", debounce(async (e) => {
@@ -1085,7 +1107,7 @@ require([
   /* ---------- start ---------- */
   (async function start() {
     try {
-      if (narrow()) els.legend.open = false;
+      if (window.matchMedia("(max-width: 820px)").matches) els.legend.open = false;
       view.ui.add(els.legend, "top-right");
 
       await view.when();
