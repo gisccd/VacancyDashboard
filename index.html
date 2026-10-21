@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Available retail space | Center City District</title>
+<title>Available Retail Space | Center City District</title>
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -26,7 +26,7 @@ const CONFIG = {
     '<a href="mailto:research@centercityphila.org">research@centercityphila.org</a>.',
 
   center: [-75.1635, 39.9515],   // [longitude, latitude]
-  zoom: 14,
+  zoom: 15,
 
   // ---- Where the data comes from ----
   // The public ArcGIS Online web map. The page draws this web map as-is,
@@ -50,6 +50,22 @@ const CONFIG = {
   // in ArcGIS Pro appear without a reload. 0 turns this off.
   refreshMinutes: 2,
 
+  // Whether the "Map layers" box starts open. false = collapsed on load.
+  // (It always starts collapsed on phones.)
+  layersOpen: false,
+
+  // When a property is deselected, go back to the starting map view
+  // (center and zoom above) and the top of the list. A property is
+  // deselected by clicking "− Hide details", pressing Escape, clicking an
+  // empty spot on the map, or clicking its point on the map a second time.
+  // false = deselecting leaves the map where it is.
+  returnHomeOnDeselect: true,
+
+  // Whether the list scrolls smoothly and the map glides when a property is
+  // selected or deselected. false = the list and map jump straight to the
+  // new spot with no motion.
+  smoothMotion: false,
+
   // ---- Properties (the points on the map) ----
 
   // Which properties to show. HasVacancy <> 'False' also hides blanks.
@@ -70,7 +86,7 @@ const CONFIG = {
   // ---- Businesses (vacant spaces inside each property) ----
   // Which business records count as vacant spaces.
   businessLink: { businessKey: "GlobalID", businessKey: "GUID" },
-  vacantSpacesWhere: "OccupancyStatus = 'Vacant' AND BusinessStatus = 'Active'",
+  vacantSpacesWhere: "OccupancyStatus = 'Vacant' AND BusinessStatus = 'Active' AND Subtype  <> '58'",
 
   // Field names on the businesses table. Set any you don't have to "".
   spaceFields: {
@@ -349,7 +365,7 @@ const CONFIG = {
 </div>
 
 <!-- Layer switches; moved onto the map at startup -->
-<details class="maplegend" id="maplegend" open hidden>
+<details class="maplegend" id="maplegend" hidden>
   <summary>Map layers</summary>
   <div class="sect" id="overlays"></div>
 </details>
@@ -366,7 +382,10 @@ require([
   esriConfig.request.useIdentity = false;
 
   const F = CONFIG.fields, S = CONFIG.spaceFields, B = CONFIG.brokerFields;
-  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  // No scroll or map animation when CONFIG.smoothMotion is off, or when the
+  // visitor has asked their device for reduced motion.
+  const reduceMotion = !CONFIG.smoothMotion ||
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   const $ = (id) => document.getElementById(id);
   const els = {
@@ -875,10 +894,10 @@ require([
     if (sp.name) rows.push(["Name", esc(sp.name)]);
     if (sp.floor) rows.push(["Floor", esc(sp.floor)]);
     rows.push(["Size", esc(sizeText(sp))]);
-    const heading = total > 1 ? `Space ${i + 1}` : "Vacant space";
+    const heading = total > 1 ? `Space ${i + 1}` : "";
     const brokers = sp.brokers.length
       ? sp.brokers.map(brokerHtml).join("")
-      : `<p class="no-broker">No broker listed. Contact us below for details.</p>`;
+      : `<p class="no-broker">No broker listed. Email research@centercityphila.org for more information.</p>`;
     return `<h3>${esc(heading)}</h3>
       <dl>${rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("")}</dl>
       ${brokers}`;
@@ -886,16 +905,14 @@ require([
 
   // Everything that used to be on the separate detail screen.
   function detailsHtml(r) {
-    if (!r.spaces.length) return `<p class="no-broker">Contact us below for details on this space.</p>`;
+    if (!r.spaces.length) return `<p class="no-broker">No broker listed. Email research@centercityphila.org for more information.</p>`;
     return r.spaces.map((sp, i) => spaceHtml(sp, i, r.spaces.length)).join("");
   }
 
   function cardHtml(r) {
     const t = typeInfo(r.type);
-    const sub = [r.propertyName, r.hood, t.label].filter(Boolean).join(", ");
+    const sub = [r.propertyName, r.hood].filter(Boolean).join(", ");
     const extra = [];
-    if (r.spaces.length > 1) extra.push(`${r.spaces.length} vacant spaces`);
-    if (r.broker && r.broker.company) extra.push(r.broker.company);
     const open = expanded.has(r.id);
     const bodyId = `details-${esc(r.id)}`;
     return `<article class="card" data-id="${esc(r.id)}" style="--c:${t.color}"
@@ -904,7 +921,6 @@ require([
       <div class="card-main">
         <span class="ttl">${esc(r.address)}</span>
         <span class="sub">${esc(sub)}</span>
-        <span class="size-txt">${esc(sizeText(r))}</span>
         ${extra.length ? `<span class="broker">${esc(extra.join(". "))}</span>` : ""}
         <button type="button" class="more" aria-expanded="${open}" aria-controls="${bodyId}">${open ? HIDE_LABEL : SHOW_LABEL}</button>
         <div class="more-body" id="${bodyId}" ${open ? "" : "hidden"}>${detailsHtml(r)}</div>
@@ -970,11 +986,30 @@ require([
       c.setAttribute("aria-current", String(id != null && c.dataset.id === String(id))));
   }
 
+  // Back to how the page looked on load: the starting map view, top of the list.
+  function goHome() {
+    view.goTo({ center: CONFIG.center, zoom: CONFIG.zoom },
+      { animate: !reduceMotion, duration: 600 }).catch(() => {});
+    const behavior = reduceMotion ? "auto" : "smooth";
+    els.panel.scrollTo({ top: 0, behavior });
+    window.scrollTo({ top: 0, behavior });   // phones, where the whole page scrolls
+  }
+
+  function deselect() {
+    if (selectedId == null) return;
+    setSelected(null);
+    if (CONFIG.returnHomeOnDeselect) goHome();
+  }
+
   // Opens or closes a card's details in place, without leaving the list.
   function toggleDetails(id, { open = !expanded.has(id), zoom = false, scroll = false } = {}) {
     const r = byId.get(id);
     const card = cardEl(id);
-    if (!r || !card) return;
+    if (!r || !card) {
+      // The card isn't in the list (filtered out); still clear the selection.
+      if (!open) { expanded.delete(id); if (selectedId === id) deselect(); }
+      return;
+    }
 
     const btn = card.querySelector(".more");
     const body = card.querySelector(".more-body");
@@ -984,7 +1019,7 @@ require([
     body.hidden = !open;
 
     if (open) setSelected(id);
-    else if (selectedId === id) setSelected(null);
+    else if (selectedId === id) deselect();
 
     if (open && zoom) {
       view.goTo({ target: r.geometry, zoom: Math.max(view.zoom, 17) },
@@ -1087,12 +1122,17 @@ require([
   });
 
   // Clicking a point on the map opens that property's details in the list.
+  // Clicking empty map, or the selected point again, deselects it.
   view.on("click", async (e) => {
     if (!layer) return;
     const res = await view.hitTest(e, { include: [layer] });
     const hit = res.results.find((h) => h.graphic && h.graphic.layer === layer);
-    if (!hit) return;
+    if (!hit) {
+      if (selectedId != null) toggleDetails(selectedId, { open: false });
+      return;
+    }
     const id = hit.graphic.attributes[layer.objectIdField];
+    if (id === selectedId) { toggleDetails(id, { open: false }); return; }
     toggleDetails(id, { open: true, scroll: true });
     const c = cardEl(id);
     if (c) c.querySelector(".more").focus({ preventScroll: true });
@@ -1107,7 +1147,7 @@ require([
   /* ---------- start ---------- */
   (async function start() {
     try {
-      if (window.matchMedia("(max-width: 820px)").matches) els.legend.open = false;
+      els.legend.open = !!CONFIG.layersOpen && !window.matchMedia("(max-width: 820px)").matches;
       view.ui.add(els.legend, "top-right");
 
       await view.when();
