@@ -22,8 +22,11 @@
    also print a report on how broker rows link to vacant spaces.
    ===================================================================== */
 const CONFIG = {
-  headerNote: 'Questions or updates? Contact CCD research at ' +
-    '<a href="mailto:research@centercityphila.org">research@centercityphila.org</a>.',
+  headerNote: 'Questions or updates? Contact Jimmy Salfiti at ' +
+    '<a href="mailto:jsalfiti@centercityphila.org">jsalfiti@centercityphila.org</a>.',
+
+  // Shown in a card's details when no broker is listed for a space.
+  noBrokerNote: "No broker listed. Email jsalfiti@centercityphila.org for more information.",
 
   center: [-75.1635, 39.9515],   // [longitude, latitude]
   zoom: 15,
@@ -85,12 +88,10 @@ const CONFIG = {
 
   // ---- Businesses (vacant spaces inside each property) ----
   // Which business records count as vacant spaces.
-  businessLink: { businessKey: "GlobalID", businessKey: "GUID" },
-  vacantSpacesWhere: "OccupancyStatus = 'Vacant' AND BusinessStatus = 'Active' AND Subtype  <> '58'",
+  vacantSpacesWhere: "OccupancyStatus = 'Vacant' AND BusinessStatus = 'Active' AND Subtype <> '58'",
 
   // Field names on the businesses table. Set any you don't have to "".
   spaceFields: {
-    businessKey: "GlobalID",
     propertyKey: "GUID",       // alias "Property ID"
     floor:       "Floor"
   },
@@ -204,7 +205,6 @@ const CONFIG = {
   input:focus-visible, select:focus-visible, button:focus-visible, a:focus-visible, summary:focus-visible {
     outline: 2px solid var(--teal); outline-offset: 2px;
   }
-  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 
   .chips { display: flex; flex-wrap: wrap; gap: 6px; }
   .chip {
@@ -217,20 +217,6 @@ const CONFIG = {
   .chip[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: #fff; }
   .chip[aria-pressed="true"] .n { color: #c3d0cc; }
   .chip[aria-pressed="true"] .dot { box-shadow: 0 0 0 2px #fff; }
-
-  .seg {
-    display: flex; overflow: hidden;
-    background: #fff; border: 1px solid var(--field); border-radius: 6px;
-  }
-  .seg button {
-    flex: 1 1 auto; padding: 7px 10px; font: inherit; font-size: 0.875rem; color: var(--ink);
-    cursor: pointer; background: none; border: 0;
-  }
-  .seg button + button { border-left: 1px solid var(--field); }
-  .seg button .n { color: var(--muted); font-variant-numeric: tabular-nums; }
-  .seg button[aria-pressed="true"] { background: var(--ink); color: #fff; }
-  .seg button[aria-pressed="true"] .n { color: #c3d0cc; }
-  .seg button:focus-visible { outline-offset: -3px; }
 
   .size-inputs { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px; }
   .size-inputs span { color: var(--muted); font-size: 0.875rem; }
@@ -251,13 +237,11 @@ const CONFIG = {
   .card .dot { width: 12px; height: 12px; margin-top: 5px; border-radius: 50%; background: var(--c); }
   .card-main { min-width: 0; }
   .card .ttl { display: block; font-size: 1rem; font-weight: 600; }
-  .card .sub { display: block; margin: 1px 0 6px; font-size: 0.875rem; color: var(--muted); }
-  .card .broker { display: block; margin: 7px 0 0; font-size: 0.85rem; color: var(--muted); }
-  .size-txt { display: block; font-size: 0.875rem; font-variant-numeric: tabular-nums; }
+  .card .sub { display: block; margin: 1px 0 0; font-size: 0.875rem; color: var(--muted); }
 
   /* "+ See details" toggle and the details it reveals */
   .card .more {
-    display: inline-block; margin-top: 10px; padding: 0;
+    display: inline-block; margin-top: 8px; padding: 0;
     font: inherit; font-size: 0.875rem; font-weight: 600; color: var(--teal-ink);
     cursor: pointer; background: none; border: 0;
   }
@@ -277,12 +261,6 @@ const CONFIG = {
 
   .empty { padding: 28px 20px; color: var(--muted); }
   .empty p { margin: 0 0 8px; }
-
-  .contact {
-    padding: 12px 20px; font-size: 0.8rem; color: var(--muted);
-    border-top: 1px solid var(--line);
-  }
-  .contact a { color: var(--teal-ink); }
 
   .map { height: 100%; min-height: 0; }
 
@@ -314,7 +292,7 @@ const CONFIG = {
 <body>
 <div class="app">
   <header class="topbar">
-    <h1 id="title"></h1>
+    <h1 id="title" hidden></h1>
     <p class="count" id="count" aria-live="polite">Loading spaces…</p>
     <p class="header-note" id="headerNote" hidden></p>
   </header>
@@ -327,22 +305,13 @@ const CONFIG = {
           <select id="hood"><option value="">All neighborhoods</option></select>
         </label>
 
-        <fieldset class="field" id="genField" hidden>
-          <legend>New or second-generation space</legend>
-          <div class="seg" id="gen">
-            <button type="button" aria-pressed="true" data-gen="">All</button>
-            <button type="button" aria-pressed="false" data-gen="new">New <span class="n"></span></button>
-            <button type="button" aria-pressed="false" data-gen="second">Second generation <span class="n"></span></button>
-          </div>
-        </fieldset>
-
         <fieldset class="field">
           <legend>Space type</legend>
           <div class="chips" id="types"></div>
         </fieldset>
 
         <fieldset class="field">
-          <legend>Square feet you need</legend>
+          <legend>Square feet</legend>
           <div class="size-inputs">
             <input id="needMin" type="number" min="0" step="100" inputmode="numeric" placeholder="Min" aria-label="Minimum square feet">
             <span>to</span>
@@ -356,8 +325,6 @@ const CONFIG = {
       </section>
 
       <ol class="list" id="list" aria-label="Available spaces"></ol>
-
-      <footer class="contact" id="contact"></footer>
     </aside>
 
     <div class="map" id="map" role="region" aria-label="Map of available spaces"></div>
@@ -381,23 +348,23 @@ require([
   // Public page: never show a Portal sign-in window.
   esriConfig.request.useIdentity = false;
 
-  const F = CONFIG.fields, S = CONFIG.spaceFields, B = CONFIG.brokerFields;
+  const F = CONFIG.fields, S = CONFIG.spaceFields, B = CONFIG.brokerFields, L = CONFIG.brokerLink;
   // No scroll or map animation when CONFIG.smoothMotion is off, or when the
   // visitor has asked their device for reduced motion.
   const reduceMotion = !CONFIG.smoothMotion ||
     window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const motion = { animate: !reduceMotion, duration: 600 };
+  const scrollBehavior = reduceMotion ? "auto" : "smooth";
 
   const $ = (id) => document.getElementById(id);
   const els = {
     title: $("title"), count: $("count"), panel: $("panel"), hood: $("hood"),
-    genField: $("genField"), gen: $("gen"), types: $("types"), needMin: $("needMin"), needMax: $("needMax"),
-    reset: $("reset"), list: $("list"), contact: $("contact"),
-    legend: $("maplegend"), overlays: $("overlays")
+    types: $("types"), needMin: $("needMin"), needMax: $("needMax"),
+    reset: $("reset"), list: $("list"), legend: $("maplegend"), overlays: $("overlays"),
+    note: $("headerNote")
   };
-  if (CONFIG.title) els.title.textContent = CONFIG.title;
-  else els.title.hidden = true;
-  const noteEl = document.getElementById("headerNote");
-  if (CONFIG.headerNote) { noteEl.innerHTML = CONFIG.headerNote; noteEl.hidden = false; }
+  if (CONFIG.title) { els.title.textContent = CONFIG.title; els.title.hidden = false; }
+  if (CONFIG.headerNote) { els.note.innerHTML = CONFIG.headerNote; els.note.hidden = false; }
 
   /* ---------- helpers ---------- */
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) =>
@@ -413,23 +380,18 @@ require([
   const fmt = (n) => Math.round(n).toLocaleString("en-US");
   const notNull = (v) => v != null;
 
-  // "new", "second" or null, from a space type value.
-  const G = CONFIG.generation || { newMatch: [], secondMatch: [] };
-  const hasAny = (t, list) => (list || []).some((m) => m && t.includes(String(m).toLowerCase()));
-  function genOf(v) {
-    const t = str(v).toLowerCase();
-    if (!t) return null;
-    if (hasAny(t, G.secondMatch)) return "second";
-    if ((G.newTypes || []).some((v) => str(v).toLowerCase() === t)) return "new";
-    if (hasAny(t, G.newMatch)) return "new";
-    return null;
-  }
+  // HasVacancy values to hide, and a test for whether a property is shown.
+  const HIDE = new Set((CONFIG.hideSpaceTypes || []).map((v) => str(v).toLowerCase()));
+  const isShown = (a) => {
+    const t = str(val(a, F, "spaceType")).toLowerCase();
+    return t !== "" && !HIDE.has(t);
+  };
 
-  // Space-type groups: each HasVacancy value maps to its group's label and color.
+  // Space-type groups, looked up by HasVacancy value.
   const TYPES = CONFIG.spaceTypes.map((t) => ({ ...t, values: [].concat(t.values ?? t.value) }));
-  const typeInfo = (value) =>
-    TYPES.find((t) => t.values.includes(value)) ||
-    { values: [value], label: value || "Type not listed", color: "#8a9894" };
+  const TYPE_BY_VALUE = new Map(TYPES.flatMap((t) => t.values.map((v) => [v, t])));
+  const typeInfo = (value) => TYPE_BY_VALUE.get(value) ||
+    { label: value || "Type not listed", color: "#8a9894" };
 
   function sizeText(x) {
     if (x.lo == null) return "Size not listed";
@@ -437,9 +399,9 @@ require([
   }
 
   /* ---------- state ---------- */
-  const state = { hood: "", types: new Set(), needMin: null, needMax: null, gen: "", sort: "sizeDesc" };
+  const state = { hood: "", types: new Set(), needMin: null, needMax: null };
   let records = [], filtered = [], byId = new Map();
-  let layerView, highlight = null, selectedId = null;
+  let layerView = null, highlight = null, selectedId = null;
   // Properties whose details are open. Kept across filter changes and data refreshes.
   const expanded = new Set();
   let layer = null, spacesTable = null, brokersTable = null;
@@ -469,17 +431,10 @@ require([
       t.values.map((v) => ({ value: v, label: t.label, symbol: marker(t.color) })))
   };
 
-  // Layers that belong to the basemap, so overlay matching skips them.
-  function basemapLayers() {
-    const bm = webMap.basemap;
-    if (!bm) return new Set();
-    return new Set(bm.baseLayers.toArray().concat(bm.referenceLayers.toArray()));
-  }
-
   // Finds the properties, businesses and broker layers in the web map, and
   // hides the web map's own copy of the vacancy points (this page draws its own).
   function findDataLayers() {
-    const tables = webMap.allTables ? webMap.allTables.toArray() : webMap.tables.toArray();
+    const tables = (webMap.allTables || webMap.tables).toArray();
     const all = webMap.allLayers.toArray().concat(tables).filter((l) => l.url);
     console.info("Layers in the web map:");
     console.table(all.map((l) => ({ title: l.title, url: l.url, layerId: l.layerId })));
@@ -487,11 +442,11 @@ require([
     const fromService = all.filter((l) => l.url.includes(CONFIG.serviceName));
     fromService.forEach((l) => { if ("visible" in l) l.visible = false; });
 
-    const find = (id) => fromService.find((l) => Number(l.layerId) === Number(id));
+    const find = (id) => (id == null ? null : fromService.find((l) => Number(l.layerId) === Number(id)));
     return {
       props: find(CONFIG.propertiesLayerId),
-      spaces: CONFIG.businessesLayerId != null ? find(CONFIG.businessesLayerId) : null,
-      brokers: CONFIG.brokersLayerId != null ? find(CONFIG.brokersLayerId) : null,
+      spaces: find(CONFIG.businessesLayerId),
+      brokers: find(CONFIG.brokersLayerId),
       hidden: new Set(fromService)
     };
   }
@@ -503,10 +458,10 @@ require([
     return new FeatureLayer({ url: src.url, layerId: found ? found.layerId : id, outFields: ["*"] });
   }
 
-  // Warns in the console about configured field names a table doesn't have.
+  // Warns in the console (once per table) about configured field names it doesn't have.
   const checked = new Set();
   function checkFields(lyr, map, label) {
-    if (checked.has(label)) return;
+    if (!lyr || !lyr.loaded || checked.has(label)) return;
     checked.add(label);
     const names = new Set((lyr.fields || []).map((f) => f.name));
     console.info(`Fields on ${label}:`, [...names].join(", "));
@@ -517,8 +472,8 @@ require([
     }
   }
 
-  // Loads every matching row in a few requests, instead of one request per popup.
-  async function loadAll(lyr, { where, geometry }) {
+  // Loads every matching row, a page at a time.
+  async function loadAll(lyr, { where, geometry } = {}) {
     await lyr.load();
     const caps = lyr.capabilities && lyr.capabilities.query;
     const paging = !!(caps && caps.supportsPagination);
@@ -543,6 +498,11 @@ require([
     return all;
   }
 
+  // Loads a table, or returns no rows (with a console warning) if it fails.
+  const loadOrEmpty = (lyr, opts, warning) => (lyr
+    ? loadAll(lyr, opts).catch((err) => { console.warn(warning, err); return []; })
+    : Promise.resolve([]));
+
   // Accepts "www.example.com" as well as full links.
   function websiteUrl(v) {
     if (!v) return "";
@@ -551,40 +511,40 @@ require([
   }
 
   function toBroker(a) {
+    const size = num(val(a, B, "size"));
     return {
       name: str(val(a, B, "name")),
       company: str(val(a, B, "company")),
       phone: str(val(a, B, "phone")),
       email: str(val(a, B, "email")),
-      url: websiteUrl(str(val(a, B, "website")) || str(val(a, B, "listingUrl"))),
+      url: websiteUrl(str(val(a, B, "website"))),
       spaceType: str(val(a, B, "spaceType")),
       notes: str(val(a, B, "notes")),
-      lo: num(val(a, B, "minSF")) ?? num(val(a, B, "size")),
-      hi: num(val(a, B, "maxSF")) ?? num(val(a, B, "size"))
+      lo: num(val(a, B, "minSF")) ?? size,
+      hi: num(val(a, B, "maxSF")) ?? size
     };
+  }
+
+  const hasContent = (b) => b.name || b.company || b.phone || b.email || b.url || b.spaceType || b.notes;
+
+  // Lowest and highest size across a list of things with lo/hi.
+  function range(items) {
+    const los = items.map((x) => x.lo ?? x.hi).filter(notNull);
+    const his = items.map((x) => x.hi ?? x.lo).filter(notNull);
+    let lo = los.length ? Math.min(...los) : null;
+    let hi = his.length ? Math.max(...his) : null;
+    if (lo != null && hi != null && lo > hi) [lo, hi] = [hi, lo];
+    return { lo, hi };
   }
 
   function toSpace(a, brokers) {
     // Size comes from the broker table only.
-    const bLo = brokers.map((b) => b.lo ?? b.hi).filter(notNull);
-    const bHi = brokers.map((b) => b.hi ?? b.lo).filter(notNull);
-    let lo = bLo.length ? Math.min(...bLo) : null;
-    let hi = bHi.length ? Math.max(...bHi) : null;
-    if (lo != null && hi != null && lo > hi) [lo, hi] = [hi, lo];
-    return {
-      name: str(val(a, S, "name")),
-      floor: str(val(a, S, "floor")),
-      lo, hi,
-      brokers: brokers.filter((b) => b.name || b.company || b.phone || b.email || b.url || b.spaceType || b.notes)
-    };
+    return { floor: str(val(a, S, "floor")), ...range(brokers), brokers: brokers.filter(hasContent) };
   }
 
   function toRecord(g, spaces) {
     const a = g.attributes;
-    const los = spaces.map((s) => s.lo).filter(notNull);
-    const his = spaces.map((s) => s.hi).filter(notNull);
-    const brokers = spaces.flatMap((s) => s.brokers);
-    const r = {
+    return {
       id: a[layer.objectIdField],
       geometry: g.geometry,
       address: str(val(a, F, "address")) || "Address not listed",
@@ -592,90 +552,63 @@ require([
       hood: str(val(a, F, "neighborhood")),
       type: str(val(a, F, "spaceType")),
       spaces,
-      broker: brokers[0] || null,
-      lo: los.length ? Math.min(...los) : null,
-      hi: his.length ? Math.max(...his) : null
+      ...range(spaces)
     };
-    r.gens = new Set([genOf(r.type)].concat(brokers.map((b) => genOf(b.spaceType))).filter(Boolean));
-    return r;
   }
 
   // Reads all three tables and joins them: property → vacant spaces → brokers.
   async function fetchRecords() {
     const [props, spaceRows, brokerRows] = await Promise.all([
       loadAll(layer, { geometry: true }),
-      spacesTable
-        ? loadAll(spacesTable, { where: CONFIG.vacantSpacesWhere }).catch((err) => {
-            console.warn("Vacant spaces couldn't be loaded. Check CONFIG.businessesLayerId " +
-              "and CONFIG.vacantSpacesWhere.", err);
-            return [];
-          })
-        : Promise.resolve([]),
-      brokersTable
-        ? loadAll(brokersTable, {}).catch((err) => {
-            console.warn("Brokers couldn't be loaded. Check CONFIG.brokersLayerId and that the " +
-              "broker table is shared publicly.", err);
-            return [];
-          })
-        : Promise.resolve([])
+      loadOrEmpty(spacesTable, { where: CONFIG.vacantSpacesWhere },
+        "Vacant spaces couldn't be loaded. Check CONFIG.businessesLayerId and CONFIG.vacantSpacesWhere."),
+      loadOrEmpty(brokersTable, {},
+        "Brokers couldn't be loaded. Check CONFIG.brokersLayerId and that the broker table is shared publicly.")
     ]);
 
     checkFields(layer, F, "properties");
-    if (spacesTable && spacesTable.loaded) {
-      checkFields(spacesTable, Object.assign({ link: CONFIG.brokerLink.businessKey }, S), "businesses");
-    }
-    if (brokersTable && brokersTable.loaded) {
-      checkFields(brokersTable, Object.assign({ link: CONFIG.brokerLink.brokerKey }, B), "brokers");
-    }
+    checkFields(spacesTable, { link: L.businessKey, ...S }, "businesses");
+    checkFields(brokersTable, { link: L.brokerKey, ...B }, "brokers");
 
-    // Group brokers by the vacant space they belong to.
-    const brokersBySpace = new Map();
-    brokerRows.forEach((g) => {
-      const k = keyOf(g.attributes[CONFIG.brokerLink.brokerKey]);
-      if (!k) return;
-      if (!brokersBySpace.has(k)) brokersBySpace.set(k, []);
-      brokersBySpace.get(k).push(toBroker(g.attributes));
-    });
+    // Group rows into a Map of key → list.
+    const groupBy = (rows, keyFn, mapFn) => {
+      const m = new Map();
+      rows.forEach((g) => {
+        const k = keyFn(g.attributes);
+        if (!k) return;
+        if (!m.has(k)) m.set(k, []);
+        m.get(k).push(mapFn(g.attributes));
+      });
+      return m;
+    };
 
-    // Group vacant spaces by the property they belong to.
-    const spacesByProperty = new Map();
-    spaceRows.forEach((g) => {
-      const a = g.attributes;
-      const k = keyOf(val(a, S, "propertyKey"));
-      if (!k) return;
-      const brokers = brokersBySpace.get(keyOf(a[CONFIG.brokerLink.businessKey])) || [];
-      if (!spacesByProperty.has(k)) spacesByProperty.set(k, []);
-      spacesByProperty.get(k).push(toSpace(a, brokers));
-    });
+    const brokersBySpace = groupBy(brokerRows, (a) => keyOf(a[L.brokerKey]), toBroker);
+    const spacesByProperty = groupBy(spaceRows, (a) => keyOf(val(a, S, "propertyKey")),
+      (a) => toSpace(a, brokersBySpace.get(keyOf(a[L.businessKey])) || []));
 
     if (brokerRows.length && spaceRows.length &&
-        ![...spacesByProperty.values()].flat().some((s) => s.brokers.length)) {
+        ![...spacesByProperty.values()].some((list) => list.some((s) => s.brokers.length))) {
       console.warn("Brokers loaded but none matched a vacant space. Check CONFIG.brokerLink.");
     }
 
-    diagnoseBrokers(props, spaceRows, brokerRows)
+    if (DEBUG) diagnoseBrokers(props, spaceRows, brokerRows)
       .catch((err) => console.warn("Broker link report failed.", err));
 
-    const hide = new Set((CONFIG.hideSpaceTypes || []).map((v) => str(v).toLowerCase()));
     return props
-      .filter((g) => {
-        const t = str(val(g.attributes, F, "spaceType")).toLowerCase();
-        return t && !hide.has(t);
-      })
-      .map((g) =>
-        toRecord(g, spacesByProperty.get(keyOf(val(g.attributes, F, "propertyKey"))) || []));
+      .filter((g) => isShown(g.attributes))
+      .map((g) => toRecord(g, spacesByProperty.get(keyOf(val(g.attributes, F, "propertyKey"))) || []));
   }
 
   /* ---------- broker link report (?debug) ---------- */
   // Explains, in the console, why broker rows do or don't reach a property.
-  // Only runs when the page address contains ?debug.
+  // Only runs once, and only when the page address contains ?debug.
   const DEBUG = /[?&]debug\b/i.test(location.search);
   let diagnosed = false;
 
   async function diagnoseBrokers(props, spaceRows, brokerRows) {
-    if (!DEBUG || diagnosed || !spacesTable || !brokersTable) return;
+    if (diagnosed || !spacesTable || !brokersTable) return;
     diagnosed = true;
-    const bizKey = CONFIG.brokerLink.businessKey, brkKey = CONFIG.brokerLink.brokerKey;
+    const bizKey = L.businessKey, brkKey = L.brokerKey;
 
     // Every business row, not just the vacant ones, to see what brokers point at.
     const allBiz = await loadAll(spacesTable, { where: "1=1" });
@@ -684,11 +617,9 @@ require([
 
     const bizByKey = new Map(allBiz.map((g) => [keyOf(g.attributes[bizKey]), g.attributes]));
     const vacantKeys = new Set(spaceRows.map((g) => keyOf(g.attributes[bizKey])));
-    const shownProps = new Set(props.map((g) => keyOf(val(g.attributes, F, "propertyKey"))));
-    const hide = new Set((CONFIG.hideSpaceTypes || []).map((v) => str(v).toLowerCase()));
-    const visibleProps = new Set(props
-      .filter((g) => { const t = str(val(g.attributes, F, "spaceType")).toLowerCase(); return t && !hide.has(t); })
-      .map((g) => keyOf(val(g.attributes, F, "propertyKey"))));
+    const propKey = (g) => keyOf(val(g.attributes, F, "propertyKey"));
+    const allProps = new Set(props.map(propKey));
+    const visibleProps = new Set(props.filter((g) => isShown(g.attributes)).map(propKey));
 
     const tally = {
       "Shown on the map": 0,
@@ -716,7 +647,7 @@ require([
         const b = bizByKey.get(k);
         const combo = statusFields.map((f) => `${f} = ${b[f] == null ? "(blank)" : `'${b[f]}'`}`).join(", ") || "(see table)";
         excludedStatuses.set(combo, (excludedStatuses.get(combo) || 0) + 1);
-      } else if (shownProps.has(k)) why = "Key matches a PROPERTY's GlobalID, not a business";
+      } else if (allProps.has(k)) why = "Key matches a PROPERTY's GlobalID, not a business";
       else why = "Key matches nothing";
       tally[why]++;
       if (why !== "Shown on the map" && examples.length < 15) examples.push({ broker: who, [brkKey]: a[brkKey], problem: why });
@@ -745,12 +676,13 @@ require([
     lyr.visible = on;
     if (!on) return;
     // A layer inside a hidden group layer won't draw, so show its groups too.
-    let p = lyr.parent;
-    while (p && p.type === "group") { p.visible = true; p = p.parent; }
+    for (let p = lyr.parent; p && p.type === "group"; p = p.parent) p.visible = true;
   }
 
   function setupOverlays(hidden) {
-    const base = basemapLayers();
+    // Skip basemap layers and this service's layers when matching titles.
+    const bm = webMap.basemap;
+    const base = new Set(bm ? bm.baseLayers.toArray().concat(bm.referenceLayers.toArray()) : []);
     const candidates = webMap.allLayers.toArray()
       .filter((l) => !base.has(l) && !hidden.has(l) && l !== layer);
 
@@ -775,62 +707,35 @@ require([
 
   els.overlays.addEventListener("change", (e) => {
     const box = e.target.closest("input[data-i]");
-    if (!box) return;
-    const lyr = overlayLayers[Number(box.dataset.i)];
+    const lyr = box && overlayLayers[Number(box.dataset.i)];
     if (lyr) setLayerVisible(lyr, box.checked);
   });
 
   /* ---------- filters ---------- */
   function buildFilterOptions() {
-    const hoods = new Map();
-    records.forEach((r) => { if (r.hood) hoods.set(r.hood, (hoods.get(r.hood) || 0) + 1); });
+    // Neighborhood dropdown: names only, sorted A–Z.
+    const hoods = [...new Set(records.map((r) => r.hood).filter(Boolean))]
+      .sort((a, b) => a.localeCompare(b));
     els.hood.length = 1;   // keep "All neighborhoods"
-    [...hoods.keys()].sort((a, b) => a.localeCompare(b)).forEach((h) => {
-      const o = document.createElement("option");
-      o.value = h;
-      o.textContent = `${h} (${hoods.get(h)})`;
-      els.hood.appendChild(o);
-    });
-    if (state.hood && !hoods.has(state.hood)) state.hood = "";
+    hoods.forEach((h) => els.hood.add(new Option(h, h)));
+    if (state.hood && !hoods.includes(state.hood)) state.hood = "";
     els.hood.value = state.hood;
 
-    // One chip per space-type group, counted by group.
+    // One chip per space-type group, counted by group, in CONFIG order.
     const counts = new Map();
     records.forEach((r) => {
       const k = typeInfo(r.type).label;
       counts.set(k, (counts.get(k) || 0) + 1);
     });
     const ordered = [...new Set(TYPES.map((t) => t.label))].filter((k) => counts.has(k));
-    [...counts.keys()].forEach((k) => { if (!ordered.includes(k)) ordered.push(k); });
-    [...state.types].forEach((k) => { if (!counts.has(k)) state.types.delete(k); });
+    counts.forEach((_, k) => { if (!ordered.includes(k)) ordered.push(k); });
+    state.types.forEach((k) => { if (!counts.has(k)) state.types.delete(k); });
 
     els.types.innerHTML = ordered.map((k) => {
       const t = TYPES.find((x) => x.label === k) || typeInfo(k);
       return `<button type="button" class="chip" aria-pressed="${state.types.has(k)}" data-type="${esc(k)}" style="--c:${t.color}">
         <span class="dot"></span>${esc(t.label)} <span class="n">${counts.get(k)}</span></button>`;
     }).join("");
-
-    // New / second-generation toggle, shown only when the data has both kinds.
-    const genCount = { new: 0, second: 0 };
-    records.forEach((r) => r.gens.forEach((g) => genCount[g]++));
-    els.gen.querySelectorAll("[data-gen]").forEach((b) => {
-      const n = b.querySelector(".n");
-      if (n) n.textContent = genCount[b.dataset.gen];
-    });
-    const usable = genCount.new > 0 && genCount.second > 0;
-    els.genField.hidden = !usable;
-    if (!usable) {
-      if (state.gen) state.gen = "";
-      console.info("New/second-generation toggle hidden: found " +
-        `${genCount.new} new and ${genCount.second} second-generation properties. ` +
-        "Check CONFIG.generation if that's wrong.");
-    }
-    setGenButtons();
-  }
-
-  function setGenButtons() {
-    els.gen.querySelectorAll("[data-gen]").forEach((b) =>
-      b.setAttribute("aria-pressed", String(b.dataset.gen === state.gen)));
   }
 
   const fits = (x) =>
@@ -840,7 +745,6 @@ require([
 
   function matches(r) {
     if (state.hood && r.hood !== state.hood) return false;
-    if (state.gen && !r.gens.has(state.gen)) return false;
     if (state.types.size && !state.types.has(typeInfo(r.type).label)) return false;
     if (state.needMin != null || state.needMax != null) {
       // A property fits if any of its vacant spaces overlaps the size range needed.
@@ -849,16 +753,12 @@ require([
     return true;
   }
 
-  function sortRecords(list) {
-    // Spaces without a size go last; ties are ordered by address.
-    const big = Number.POSITIVE_INFINITY;
-    const byAddress = (a, b) => a.address.localeCompare(b.address, "en", { numeric: true });
-    if (state.sort === "sizeDesc") return list.sort((a, b) => ((b.hi ?? -1) - (a.hi ?? -1)) || byAddress(a, b));
-    return list.sort((a, b) => ((a.lo ?? big) - (b.lo ?? big)) || byAddress(a, b));
-  }
+  // Largest spaces first; spaces without a size go last; ties by address.
+  const bySize = (a, b) => ((b.hi ?? -1) - (a.hi ?? -1)) ||
+    a.address.localeCompare(b.address, "en", { numeric: true });
 
   function apply() {
-    filtered = sortRecords(records.filter(matches));
+    filtered = records.filter(matches).sort(bySize);
     renderCount();
     renderList();
     syncMap();
@@ -874,6 +774,10 @@ require([
   /* ---------- cards with "+ See details" ---------- */
   const SHOW_LABEL = "+ See details";
   const HIDE_LABEL = "− Hide details";
+  const NO_BROKER = `<p class="no-broker">${esc(CONFIG.noBrokerNote)}</p>`;
+
+  const dlHtml = (rows, cls = "") =>
+    `<dl${cls ? ` class="${cls}"` : ""}>${rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("")}</dl>`;
 
   function brokerHtml(b) {
     const rows = [];
@@ -886,33 +790,25 @@ require([
       rows.push(["Website", `<a href="${esc(b.url)}" target="_blank" rel="noopener">${esc(b.url.replace(/^https?:\/\//i, "").replace(/\/$/, ""))}</a>`]);
     }
     if (b.notes) rows.push(["Notes", esc(b.notes)]);
-    return `<dl class="contact-block">${rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("")}</dl>`;
+    return dlHtml(rows, "contact-block");
   }
 
   function spaceHtml(sp, i, total) {
     const rows = [];
-    if (sp.name) rows.push(["Name", esc(sp.name)]);
     if (sp.floor) rows.push(["Floor", esc(sp.floor)]);
     rows.push(["Size", esc(sizeText(sp))]);
-    const heading = total > 1 ? `Space ${i + 1}` : "";
-    const brokers = sp.brokers.length
-      ? sp.brokers.map(brokerHtml).join("")
-      : `<p class="no-broker">No broker listed. Email research@centercityphila.org for more information.</p>`;
-    return `<h3>${esc(heading)}</h3>
-      <dl>${rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("")}</dl>
-      ${brokers}`;
+    // A heading only when a property has more than one vacant space.
+    const heading = total > 1 ? `<h3>Space ${i + 1}</h3>` : "";
+    return heading + dlHtml(rows) + (sp.brokers.length ? sp.brokers.map(brokerHtml).join("") : NO_BROKER);
   }
 
-  // Everything that used to be on the separate detail screen.
-  function detailsHtml(r) {
-    if (!r.spaces.length) return `<p class="no-broker">No broker listed. Email research@centercityphila.org for more information.</p>`;
-    return r.spaces.map((sp, i) => spaceHtml(sp, i, r.spaces.length)).join("");
-  }
+  const detailsHtml = (r) => (r.spaces.length
+    ? r.spaces.map((sp, i) => spaceHtml(sp, i, r.spaces.length)).join("")
+    : NO_BROKER);
 
   function cardHtml(r) {
     const t = typeInfo(r.type);
     const sub = [r.propertyName, r.hood].filter(Boolean).join(", ");
-    const extra = [];
     const open = expanded.has(r.id);
     const bodyId = `details-${esc(r.id)}`;
     return `<article class="card" data-id="${esc(r.id)}" style="--c:${t.color}"
@@ -920,8 +816,7 @@ require([
       <span class="dot" aria-hidden="true"></span>
       <div class="card-main">
         <span class="ttl">${esc(r.address)}</span>
-        <span class="sub">${esc(sub)}</span>
-        ${extra.length ? `<span class="broker">${esc(extra.join(". "))}</span>` : ""}
+        ${sub ? `<span class="sub">${esc(sub)}</span>` : ""}
         <button type="button" class="more" aria-expanded="${open}" aria-controls="${bodyId}">${open ? HIDE_LABEL : SHOW_LABEL}</button>
         <div class="more-body" id="${bodyId}" ${open ? "" : "hidden"}>${detailsHtml(r)}</div>
       </div>
@@ -943,29 +838,25 @@ require([
     }
     els.list.innerHTML = filtered.map((r) => `<li>${cardHtml(r)}</li>`).join("");
 
-    if (focusId != null) {
-      const card = cardEl(focusId);
-      if (card) card.querySelector(".more").focus({ preventScroll: true });
-    }
+    const card = focusId != null && cardEl(focusId);
+    if (card) card.querySelector(".more").focus({ preventScroll: true });
   }
 
   function syncMap() {
     if (!layerView) return;
     // Always filter by ID, so the map shows exactly the properties in the list.
-    if (filtered.length) layerView.filter = { objectIds: filtered.map((r) => r.id) };
-    else layerView.filter = { where: "1=0" };
+    layerView.filter = filtered.length ? { objectIds: filtered.map((r) => r.id) } : { where: "1=0" };
   }
 
   function zoomToFiltered() {
     if (!filtered.length) return;
-    view.goTo(filtered.map((r) => r.geometry), { animate: !reduceMotion, duration: 600 })
+    view.goTo(filtered.map((r) => r.geometry), motion)
       .then(() => { if (view.zoom > 17) view.zoom = 17; })
       .catch(() => {});
   }
 
   function resetFilters() {
-    Object.assign(state, { hood: "", gen: "", needMin: null, needMax: null });
-    setGenButtons();
+    Object.assign(state, { hood: "", needMin: null, needMax: null });
     state.types.clear();
     els.hood.value = ""; els.needMin.value = ""; els.needMax.value = "";
     els.types.querySelectorAll(".chip").forEach((c) => c.setAttribute("aria-pressed", "false"));
@@ -982,17 +873,16 @@ require([
   function setSelected(id) {
     selectedId = id;
     setHighlight(id);
+    const sel = String(id);
     els.list.querySelectorAll(".card").forEach((c) =>
-      c.setAttribute("aria-current", String(id != null && c.dataset.id === String(id))));
+      c.setAttribute("aria-current", String(id != null && c.dataset.id === sel)));
   }
 
   // Back to how the page looked on load: the starting map view, top of the list.
   function goHome() {
-    view.goTo({ center: CONFIG.center, zoom: CONFIG.zoom },
-      { animate: !reduceMotion, duration: 600 }).catch(() => {});
-    const behavior = reduceMotion ? "auto" : "smooth";
-    els.panel.scrollTo({ top: 0, behavior });
-    window.scrollTo({ top: 0, behavior });   // phones, where the whole page scrolls
+    view.goTo({ center: CONFIG.center, zoom: CONFIG.zoom }, motion).catch(() => {});
+    els.panel.scrollTo({ top: 0, behavior: scrollBehavior });
+    window.scrollTo({ top: 0, behavior: scrollBehavior });   // phones, where the whole page scrolls
   }
 
   function deselect() {
@@ -1003,44 +893,38 @@ require([
 
   // Opens or closes a card's details in place, without leaving the list.
   function toggleDetails(id, { open = !expanded.has(id), zoom = false, scroll = false } = {}) {
+    open ? expanded.add(id) : expanded.delete(id);
     const r = byId.get(id);
     const card = cardEl(id);
-    if (!r || !card) {
-      // The card isn't in the list (filtered out); still clear the selection.
-      if (!open) { expanded.delete(id); if (selectedId === id) deselect(); }
-      return;
+
+    if (card) {
+      const btn = card.querySelector(".more");
+      btn.setAttribute("aria-expanded", String(open));
+      btn.textContent = open ? HIDE_LABEL : SHOW_LABEL;
+      card.querySelector(".more-body").hidden = !open;
     }
 
-    const btn = card.querySelector(".more");
-    const body = card.querySelector(".more-body");
-    if (open) expanded.add(id); else expanded.delete(id);
-    btn.setAttribute("aria-expanded", String(open));
-    btn.textContent = open ? HIDE_LABEL : SHOW_LABEL;
-    body.hidden = !open;
-
-    if (open) setSelected(id);
-    else if (selectedId === id) deselect();
-
-    if (open && zoom) {
-      view.goTo({ target: r.geometry, zoom: Math.max(view.zoom, 17) },
-        { animate: !reduceMotion, duration: 600 }).catch(() => {});
-    }
-    if (scroll) {
-      card.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
-    }
+    if (!open) { if (selectedId === id) deselect(); return; }
+    if (!r || !card) return;
+    setSelected(id);
+    if (zoom) view.goTo({ target: r.geometry, zoom: Math.max(view.zoom, 17) }, motion).catch(() => {});
+    if (scroll) card.scrollIntoView({ behavior: scrollBehavior, block: "start" });
   }
 
-  /* ---------- live refresh ---------- */
+  /* ---------- loading & live refresh ---------- */
+  async function load() {
+    records = await fetchRecords();
+    byId = new Map(records.map((r) => [r.id, r]));
+    lastLoad = Date.now();
+  }
+
   async function refresh() {
     if (refreshing || !layer) return;
     refreshing = true;
     try {
-      const next = await fetchRecords();
-      records = next;
-      byId = new Map(records.map((r) => [r.id, r]));
-      lastLoad = Date.now();
+      await load();
       // Forget open cards for properties that are no longer listed.
-      [...expanded].forEach((id) => { if (!byId.has(id)) expanded.delete(id); });
+      expanded.forEach((id) => { if (!byId.has(id)) expanded.delete(id); });
       if (selectedId != null && !byId.has(selectedId)) selectedId = null;
       buildFilterOptions();
       apply();
@@ -1072,14 +956,6 @@ require([
     state.hood = els.hood.value; apply(); zoomToFiltered();
   });
 
-  els.gen.addEventListener("click", (e) => {
-    const b = e.target.closest("[data-gen]");
-    if (!b) return;
-    state.gen = b.dataset.gen;
-    setGenButtons();
-    apply();
-  });
-
   const readSize = debounce(() => {
     let a = num(els.needMin.value), b = num(els.needMax.value);
     if (a != null && b != null && a > b) [a, b] = [b, a];
@@ -1105,43 +981,48 @@ require([
   els.list.addEventListener("click", (e) => {
     if (e.target.closest('[data-action="reset"]')) { resetFilters(); return; }
     const btn = e.target.closest(".more");
-    if (!btn) return;
-    toggleDetails(Number(btn.closest(".card").dataset.id), { zoom: true });
+    if (btn) toggleDetails(Number(btn.closest(".card").dataset.id), { zoom: true });
   });
+
+  const focusToggle = (id) => {
+    const c = cardEl(id);
+    if (c) c.querySelector(".more").focus({ preventScroll: true });
+  };
 
   // Escape closes the details of the card that has focus (or the current one).
   document.addEventListener("keydown", (e) => {
     if (e.key !== "Escape") return;
-    const active = document.activeElement;
-    const card = active && active.closest ? active.closest(".card") : null;
+    const card = document.activeElement && document.activeElement.closest
+      ? document.activeElement.closest(".card") : null;
     const id = card ? Number(card.dataset.id) : selectedId;
     if (id == null || !expanded.has(id)) return;
     toggleDetails(id, { open: false });
-    const c = cardEl(id);
-    if (c) c.querySelector(".more").focus({ preventScroll: true });
+    focusToggle(id);
   });
+
+  // The vacancy point under the pointer, if any.
+  async function pointAt(e) {
+    const res = await view.hitTest(e, { include: [layer] });
+    return res.results.find((h) => h.graphic && h.graphic.layer === layer);
+  }
 
   // Clicking a point on the map opens that property's details in the list.
   // Clicking empty map, or the selected point again, deselects it.
   view.on("click", async (e) => {
     if (!layer) return;
-    const res = await view.hitTest(e, { include: [layer] });
-    const hit = res.results.find((h) => h.graphic && h.graphic.layer === layer);
-    if (!hit) {
+    const hit = await pointAt(e);
+    const id = hit ? hit.graphic.attributes[layer.objectIdField] : null;
+    if (id == null || id === selectedId) {
       if (selectedId != null) toggleDetails(selectedId, { open: false });
       return;
     }
-    const id = hit.graphic.attributes[layer.objectIdField];
-    if (id === selectedId) { toggleDetails(id, { open: false }); return; }
     toggleDetails(id, { open: true, scroll: true });
-    const c = cardEl(id);
-    if (c) c.querySelector(".more").focus({ preventScroll: true });
+    focusToggle(id);
   });
 
   view.on("pointer-move", debounce(async (e) => {
     if (!layer) return;
-    const res = await view.hitTest(e, { include: [layer] });
-    view.container.style.cursor = res.results.length ? "pointer" : "";
+    view.container.style.cursor = (await pointAt(e)) ? "pointer" : "";
   }, 30));
 
   /* ---------- start ---------- */
@@ -1173,10 +1054,8 @@ require([
 
       setupOverlays(found.hidden);
 
-      records = await fetchRecords();
-      byId = new Map(records.map((r) => [r.id, r]));
-      lastLoad = Date.now();
-      layerView = await view.whenLayerView(layer);
+      // Load the data and the map layer at the same time.
+      [layerView] = await Promise.all([view.whenLayerView(layer), load()]);
       buildFilterOptions();
       apply();
       startAutoRefresh();
