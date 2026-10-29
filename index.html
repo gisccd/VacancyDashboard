@@ -17,7 +17,8 @@
 /* =====================================================================
    CONFIG: this is the only section you should need to edit.
    Open the browser console (F12) on first load: the page prints every
-   layer in the web map and every field on each table it reads.
+   layer in the web map and every field on each table it reads, and
+   warns about any HasVacancy value that doesn't match a space type below.
    Add ?debug to the page address (e.g. retail-vacancies.html?debug) to
    also print a report on how broker rows link to vacant spaces.
    ===================================================================== */
@@ -69,13 +70,23 @@ const CONFIG = {
   // new spot with no motion.
   smoothMotion: false,
 
+  // ---- Photos ----
+  // Each card shows the first image attached to its property on the
+  // properties layer. Or set "field" to the name of a field that holds a
+  // photo link, to use that instead of attachments. "thumbWidth" asks the
+  // server for a smaller copy (in pixels) so the list loads quickly.
+  // enabled: false turns photos off.
+  photos: { enabled: true, field: "", thumbWidth: 240 },
+
   // ---- Properties (the points on the map) ----
 
-  // Which properties to show. HasVacancy <> 'False' also hides blanks.
-  where: "Center_City_District = 'Yes' AND HasVacancy <> 'False'",
+  // Which properties to load. A loaded property is shown when its HasVacancy
+  // holds a space type, OR when one of its open businesses has a broker
+  // (see listedSpacesWhere below), even if its HasVacancy is 'False' or blank.
+  where: "Center_City_District = 'Yes'",
 
-  // HasVacancy values that never show, whatever their capitalization.
-  // Blank values are always hidden too.
+  // HasVacancy values that don't count as a space type, whatever their
+  // capitalization. Blank values never count either.
   hideSpaceTypes: ["False"],
 
   fields: {
@@ -90,6 +101,13 @@ const CONFIG = {
   // Which business records count as vacant spaces.
   vacantSpacesWhere: "OccupancyStatus = 'Vacant' AND BusinessStatus = 'Active' AND Subtype <> '58'",
 
+  // Spaces that still have a tenant but are on the market (lease ending).
+  // A business from this query is listed only while a broker row is linked
+  // to it, so deleting the broker row once the space leases removes it.
+  // They're listed just like vacant spaces. "" turns this off.
+  listedSpacesWhere: "BusinessStatus = 'Active' AND Subtype <> '58' AND " +
+    "(OccupancyStatus <> 'Vacant' OR OccupancyStatus IS NULL)",
+
   // Field names on the businesses table. Set any you don't have to "".
   spaceFields: {
     propertyKey: "GUID",       // alias "Property ID"
@@ -103,11 +121,14 @@ const CONFIG = {
 
   // Field names on the broker table. Set any you don't have to "".
   // Use "size" for a single size, or "minSF" and "maxSF" for a range.
+  // Each one shows on the card only when it has a value.
   brokerFields: {
-    name:      "Broker",
-    company:   "BrokerageCompany",
-    phone:     "BrokerPhone",
-    email:     "BrokerEmail",
+    company:      "BrokerageCompany",
+    companyPhone: "CompanyPhone",
+    companyEmail: "CompanyEmail",
+    name:         "Broker",
+    phone:        "BrokerPhone",
+    email:        "BrokerEmail",
     website:   "Website",
     spaceType: "SpaceType",
     size:      "MaxSize",
@@ -121,26 +142,46 @@ const CONFIG = {
     { match: "Transit Lines", label: "Transit Lines", on: false },
     { match: "Recent Completed Multifamily Developments", label: "Recently Completed Multifamily Developments", on: false },
     { match: "Retail Districts", label: "Retail Corridors", on: false },
+    { match: "Hotels", label: "Hotels", on: false },
     { match: "Center City District Boundary", label: "Center City District Boundaries", on: true }
   ],
 
   // ---- Space types ----
-  // Each entry is one filter chip and one color. A property belongs to an
-  // entry when its HasVacancy value matches ANY value in the list, exactly.
+  // Each entry is one filter chip and one color. A property's space type
+  // comes from its HasVacancy value or, if that's 'False' or blank, from its
+  // broker's SpaceType.
+  // It first matches a value in "values" (ignoring capitalization, extra
+  // spaces, curly apostrophes, "&" vs "and", and "Second Generation" vs
+  // "Second-Gen"). If none matches, the first entry with a "keywords" word
+  // in the value wins, so new wordings like "Second-Gen Flex/Medical Space"
+  // still get the right color. Anything left over goes to the entry named
+  // in unknownSpaceType, and is listed in a console warning (F12).
   spaceTypes: [
     { label: "Retail",             color: "#022838",
-      values: ["Second Generation Retail Space", "Retail"] },
+      values: ["Second Generation Retail Space", "Retail"],
+      keywords: ["retail"] },
     { label: "Food & Beverage",    color: "#E98880",
       values: ["Second Generation Food & Beverage Space", "Full Service Restaurant or Bar",
-               "Takeout, Coffee Shop, or Quick Service"] },
+               "Takeout, Coffee Shop, or Quick Service", "Second-Gen Full Service Restaurant or Bar",
+               "Second-Gen Takeout, Coffee Shop, or Quick Service"],
+      keywords: ["food", "beverage", "restaurant", "bar", "coffee", "cafe", "takeout", "take-out", "quick service"] },
     { label: "Service Provider",   color: "#E15928",
       values: ["Second Generation Service Provider Space", "Service Provider",
-               "Fitness, Salon, or Personal Care"] },
+               "Fitness, Salon, or Personal Care"],
+      keywords: ["service provider", "fitness", "salon", "personal care", "barber", "spa", "gym"] },
     { label: "Flex",               color: "#DFB92A",
-      values: ["Second Generation Flex Space", "Flex or Medical Space"] },
+      values: ["Second Generation Flex Space", "Flex or Medical Space", "Second-Gen Flex or Medical Space"],
+      keywords: ["flex", "medical"] },
     { label: "Space Type Unknown", color: "#007B95",
-      values: ["Space Type Unknown"] }
-  ]
+      values: ["Space Type Unknown"],
+      keywords: ["unknown"] },
+    { label: "Property For Sale",             color: "#808080",
+      values: ["Property For Sale"],
+      keywords: ["property"] }
+  ],
+
+  // Where properties with no recognizable space type go. "" = gray.
+  unknownSpaceType: "Space Type Unknown"
 };
 /* ===================================================================== */
 </script>
@@ -236,6 +277,12 @@ const CONFIG = {
   .card[aria-current="true"] { background: var(--select); box-shadow: inset 3px 0 0 var(--teal); }
   .card .dot { width: 12px; height: 12px; margin-top: 5px; border-radius: 50%; background: var(--c); }
   .card-main { min-width: 0; }
+  .card.has-photo { grid-template-columns: 12px 1fr 96px; }
+  .card .thumb {
+    width: 96px; height: 72px; overflow: hidden;
+    border-radius: 6px; background: var(--mist);
+  }
+  .card .thumb img { display: block; width: 100%; height: 100%; object-fit: cover; }
   .card .ttl { display: block; font-size: 1rem; font-weight: 600; }
   .card .sub { display: block; margin: 1px 0 0; font-size: 0.875rem; color: var(--muted); }
 
@@ -380,18 +427,42 @@ require([
   const fmt = (n) => Math.round(n).toLocaleString("en-US");
   const notNull = (v) => v != null;
 
-  // HasVacancy values to hide, and a test for whether a property is shown.
-  const HIDE = new Set((CONFIG.hideSpaceTypes || []).map((v) => str(v).toLowerCase()));
-  const isShown = (a) => {
-    const t = str(val(a, F, "spaceType")).toLowerCase();
+  // Gray for any space type that matches no CONFIG.spaceTypes entry.
+  const OTHER_COLOR = "#8a9894";
+
+  // Space-type text in a form that ignores capitalization, extra or trailing
+  // spaces, curly apostrophes, "&" vs "and", and "Second Generation" vs "Second-Gen".
+  const normType = (v) => str(v).toLowerCase()
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/\s*&\s*/g, " and ")
+    .replace(/\s+/g, " ").trim()
+    .replace(/^second[\s-]*gen(eration)?\b/, "second-gen");
+
+  // HasVacancy values to hide, and a test for whether a value is a space type.
+  const HIDE = new Set((CONFIG.hideSpaceTypes || []).map(normType));
+  const isShown = (type) => {
+    const t = normType(type);
     return t !== "" && !HIDE.has(t);
   };
 
-  // Space-type groups, looked up by HasVacancy value.
-  const TYPES = CONFIG.spaceTypes.map((t) => ({ ...t, values: [].concat(t.values ?? t.value) }));
-  const TYPE_BY_VALUE = new Map(TYPES.flatMap((t) => t.values.map((v) => [v, t])));
-  const typeInfo = (value) => TYPE_BY_VALUE.get(value) ||
-    { label: value || "Type not listed", color: "#8a9894" };
+  // Space-type groups. The map and the list both use groupOf(), so a point
+  // and its card always get the same color.
+  const reEsc = (t) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const TYPES = CONFIG.spaceTypes.map((t) => ({
+    ...t,
+    values: [].concat(t.values ?? t.value),
+    words: [].concat(t.keywords || []).map((k) => new RegExp(`\\b${reEsc(normType(k))}\\b`))
+  }));
+  const TYPE_BY_VALUE = new Map(TYPES.flatMap((t) => t.values.map((v) => [normType(v), t])));
+  // The group for a value: an exact match first, then a keyword match. null if neither.
+  const groupOf = (value) => {
+    const n = normType(value);
+    if (!n) return null;
+    return TYPE_BY_VALUE.get(n) || TYPES.find((t) => t.words.some((re) => re.test(n))) || null;
+  };
+  const UNKNOWN = TYPES.find((t) => t.label === CONFIG.unknownSpaceType) ||
+    { label: "Type not listed", color: OTHER_COLOR };
+  const typeInfo = (value) => groupOf(value) || UNKNOWN;
 
   function sizeText(x) {
     if (x.lo == null) return "Size not listed";
@@ -423,13 +494,47 @@ require([
   const marker = (color) =>
     ({ type: "simple-marker", size: 10, color, outline: { color: "#fff", width: 1.2 } });
 
-  const renderer = {
-    type: "unique-value",
-    field: F.spaceType,
-    defaultSymbol: marker("#8a9894"),
-    uniqueValueInfos: TYPES.flatMap((t) =>
-      t.values.map((v) => ({ value: v, label: t.label, symbol: marker(t.color) })))
-  };
+  // Gives every listed property its own symbol in its space type's color,
+  // worked out here with the same matching as the list. This way the map
+  // can't disagree with the list, whatever the raw field values look like.
+  let rendererKey = "";
+  function updateRenderer() {
+    if (!layer) return;
+    const infos = records.map((r) => {
+      const t = typeInfo(r.type);
+      return { value: r.id, label: t.label, color: t.color };
+    });
+    const key = JSON.stringify(infos.map((i) => [i.value, i.color]));
+    if (key === rendererKey) return;
+    rendererKey = key;
+
+    layer.renderer = {
+      type: "unique-value",
+      field: layer.objectIdField,
+      defaultSymbol: marker(OTHER_COLOR),
+      uniqueValueInfos: infos.map((i) => ({ value: i.value, label: i.label, symbol: marker(i.color) }))
+    };
+
+    // Every space type value and the group it landed in.
+    const seen = new Map();
+    records.forEach((r) => {
+      const k = r.type || "(blank)";
+      const row = seen.get(k) || { value: k, group: typeInfo(r.type).label,
+        matched: groupOf(r.type) ? "yes" : "NO", properties: 0 };
+      row.properties++;
+      seen.set(k, row);
+    });
+    const unmatched = [...seen.values()].filter((row) => row.matched === "NO");
+    if (unmatched.length) {
+      console.warn(`Space type values that match no CONFIG.spaceTypes entry (shown as "${UNKNOWN.label}"). ` +
+        "Add each one to the right entry's values list:");
+      console.table(unmatched);
+    }
+    if (DEBUG) {
+      console.info("Every space type value and its group:");
+      console.table([...seen.values()]);
+    }
+  }
 
   // Finds the properties, businesses and broker layers in the web map, and
   // hides the web map's own copy of the vacancy points (this page draws its own).
@@ -503,6 +608,19 @@ require([
     ? loadAll(lyr, opts).catch((err) => { console.warn(warning, err); return []; })
     : Promise.resolve([]));
 
+  // A property's space type as text. If HasVacancy has a coded-value domain
+  // (including one that differs by subtype), this is the domain's description,
+  // not the stored code.
+  function spaceTypeOf(g) {
+    const raw = val(g.attributes, F, "spaceType");
+    const d = layer && layer.getFieldDomain ? layer.getFieldDomain(F.spaceType, { feature: g }) : null;
+    if (d && d.type === "coded-value") {
+      const c = d.codedValues.find((cv) => String(cv.code) === String(raw));
+      if (c) return str(c.name);
+    }
+    return str(raw);
+  }
+
   // Accepts "www.example.com" as well as full links.
   function websiteUrl(v) {
     if (!v) return "";
@@ -515,6 +633,8 @@ require([
     return {
       name: str(val(a, B, "name")),
       company: str(val(a, B, "company")),
+      companyPhone: str(val(a, B, "companyPhone")),
+      companyEmail: str(val(a, B, "companyEmail")),
       phone: str(val(a, B, "phone")),
       email: str(val(a, B, "email")),
       url: websiteUrl(str(val(a, B, "website"))),
@@ -525,7 +645,8 @@ require([
     };
   }
 
-  const hasContent = (b) => b.name || b.company || b.phone || b.email || b.url || b.spaceType || b.notes;
+  const hasContent = (b) => b.name || b.company || b.companyPhone || b.companyEmail ||
+    b.phone || b.email || b.url || b.spaceType || b.notes;
 
   // Lowest and highest size across a list of things with lo/hi.
   function range(items) {
@@ -544,24 +665,39 @@ require([
 
   function toRecord(g, spaces) {
     const a = g.attributes;
+    const id = a[layer.objectIdField];
+    // The property's own space type, or failing that, its brokers'. The first
+    // one that matches a group wins.
+    const ownType = spaceTypeOf(g);
+    const candidates = [isShown(ownType) ? ownType : ""]
+      .concat(spaces.flatMap((sp) => sp.brokers).map((b) => b.spaceType))
+      .filter(Boolean);
     return {
-      id: a[layer.objectIdField],
+      id,
+      key: keyOf(val(a, F, "propertyKey")),
+      // From the photo field if one is set, else the attachment found last time.
+      photo: P.field ? websiteUrl(str(a[P.field])) : (photoById.get(id) || ""),
       geometry: g.geometry,
       address: str(val(a, F, "address")) || "Address not listed",
       propertyName: str(val(a, F, "propertyName")),
       hood: str(val(a, F, "neighborhood")),
-      type: str(val(a, F, "spaceType")),
+      type: candidates.find((c) => groupOf(c)) || candidates[0] || "",
       spaces,
       ...range(spaces)
     };
   }
 
-  // Reads all three tables and joins them: property → vacant spaces → brokers.
+  // Reads all three tables and joins them: property → listed spaces → brokers.
+  // A listed space is either vacant, or still occupied but with a broker attached.
   async function fetchRecords() {
-    const [props, spaceRows, brokerRows] = await Promise.all([
+    const [props, spaceRows, listedRows, brokerRows] = await Promise.all([
       loadAll(layer, { geometry: true }),
       loadOrEmpty(spacesTable, { where: CONFIG.vacantSpacesWhere },
         "Vacant spaces couldn't be loaded. Check CONFIG.businessesLayerId and CONFIG.vacantSpacesWhere."),
+      CONFIG.listedSpacesWhere
+        ? loadOrEmpty(spacesTable, { where: CONFIG.listedSpacesWhere },
+            "Spaces with ending leases couldn't be loaded. Check CONFIG.listedSpacesWhere.")
+        : Promise.resolve([]),
       loadOrEmpty(brokersTable, {},
         "Brokers couldn't be loaded. Check CONFIG.brokersLayerId and that the broker table is shared publicly.")
     ]);
@@ -570,33 +706,103 @@ require([
     checkFields(spacesTable, { link: L.businessKey, ...S }, "businesses");
     checkFields(brokersTable, { link: L.brokerKey, ...B }, "brokers");
 
-    // Group rows into a Map of key → list.
-    const groupBy = (rows, keyFn, mapFn) => {
-      const m = new Map();
-      rows.forEach((g) => {
-        const k = keyFn(g.attributes);
-        if (!k) return;
-        if (!m.has(k)) m.set(k, []);
-        m.get(k).push(mapFn(g.attributes));
-      });
-      return m;
-    };
+    const brokersBySpace = new Map();
+    brokerRows.forEach((g) => {
+      const k = keyOf(g.attributes[L.brokerKey]);
+      if (!k) return;
+      if (!brokersBySpace.has(k)) brokersBySpace.set(k, []);
+      brokersBySpace.get(k).push(toBroker(g.attributes));
+    });
+    const brokersFor = (a) => brokersBySpace.get(keyOf(a[L.businessKey])) || [];
 
-    const brokersBySpace = groupBy(brokerRows, (a) => keyOf(a[L.brokerKey]), toBroker);
-    const spacesByProperty = groupBy(spaceRows, (a) => keyOf(val(a, S, "propertyKey")),
-      (a) => toSpace(a, brokersBySpace.get(keyOf(a[L.businessKey])) || []));
+    // Vacant spaces always; occupied ones only while a broker row is linked.
+    const vacantKeys = new Set(spaceRows.map((g) => keyOf(g.attributes[L.businessKey])));
+    const withBroker = new Set();   // properties with an occupied space on the market
+    const listed = spaceRows.map((g) => g.attributes).concat(
+      listedRows.map((g) => g.attributes).filter((a) => {
+        const k = keyOf(a[L.businessKey]);
+        const ok = k && !vacantKeys.has(k) && brokersFor(a).some(hasContent);
+        if (ok) withBroker.add(keyOf(val(a, S, "propertyKey")));
+        return ok;
+      }));
 
-    if (brokerRows.length && spaceRows.length &&
-        ![...spacesByProperty.values()].some((list) => list.some((s) => s.brokers.length))) {
-      console.warn("Brokers loaded but none matched a vacant space. Check CONFIG.brokerLink.");
+    const spacesByProperty = new Map();
+    listed.forEach((a) => {
+      const k = keyOf(val(a, S, "propertyKey"));
+      if (!k) return;
+      if (!spacesByProperty.has(k)) spacesByProperty.set(k, []);
+      spacesByProperty.get(k).push(toSpace(a, brokersFor(a)));
+    });
+
+    if (brokerRows.length && listed.length &&
+        ![...spacesByProperty.values()].some((list) => list.some((sp) => sp.brokers.length))) {
+      console.warn("Brokers loaded but none matched a listed space. Check CONFIG.brokerLink.");
     }
 
-    if (DEBUG) diagnoseBrokers(props, spaceRows, brokerRows)
-      .catch((err) => console.warn("Broker link report failed.", err));
+    // Shown if HasVacancy holds a space type, or if an open business there has a broker.
+    const out = props.map((g) => {
+      const k = keyOf(val(g.attributes, F, "propertyKey"));
+      const show = isShown(spaceTypeOf(g)) || withBroker.has(k);
+      return show ? toRecord(g, spacesByProperty.get(k) || []) : null;
+    }).filter(Boolean);
 
-    return props
-      .filter((g) => isShown(g.attributes))
-      .map((g) => toRecord(g, spacesByProperty.get(keyOf(val(g.attributes, F, "propertyKey"))) || []));
+    if (DEBUG) {
+      const listedKeys = new Set(listed.map((a) => keyOf(a[L.businessKey])));
+      diagnoseBrokers(props, listedKeys, brokerRows, new Set(out.map((r) => r.key)))
+        .catch((err) => console.warn("Broker link report failed.", err));
+    }
+    return out;
+  }
+
+  /* ---------- photos (attachments on the properties layer) ---------- */
+  const P = CONFIG.photos || {};
+  let photoById = new Map();   // property ID → photo URL, kept across refreshes
+  let photoNoteShown = false;
+
+  const isImage = (a) =>
+    /^image\//i.test(a.contentType || "") || /\.(jpe?g|png|gif|webp)$/i.test(a.name || "");
+
+  // Finds the first image attached to each listed property, then redraws the
+  // list if any photo changed. Runs after the list is shown, so it never
+  // holds up the page.
+  async function loadPhotos() {
+    if (!P.enabled || P.field || !layer || !records.length) return;
+    const caps = layer.capabilities || {};
+    if (!(caps.data && caps.data.supportsAttachment)) {
+      if (!photoNoteShown) {
+        console.info("The properties layer has no attachments, so no photos are shown. " +
+          "Turn on attachments for that layer, or set CONFIG.photos.field to a field with photo links.");
+        photoNoteShown = true;
+      }
+      return;
+    }
+    const resize = !!(caps.attachment && caps.attachment.supportsResize) && Number(P.thumbWidth) > 0;
+    const sized = (url) => (resize ? `${url}${url.includes("?") ? "&" : "?"}w=${Number(P.thumbWidth)}` : url);
+
+    const ids = records.map((r) => r.id);
+    const next = new Map();
+    for (let i = 0; i < ids.length; i += 100) {
+      const chunk = ids.slice(i, i + 100);
+      try {
+        const res = await layer.queryAttachments({ objectIds: chunk });
+        Object.entries(res).forEach(([oid, infos]) => {
+          const img = (infos || []).find(isImage);
+          if (img) next.set(Number(oid), sized(img.url));
+        });
+      } catch (err) {
+        // Keep the photos we already had for this batch.
+        chunk.forEach((id) => { if (photoById.has(id)) next.set(id, photoById.get(id)); });
+        console.warn("Some photos couldn't be loaded.", err);
+      }
+    }
+    photoById = next;
+
+    let changed = false;
+    records.forEach((r) => {
+      const p = next.get(r.id) || "";
+      if (p !== r.photo) { r.photo = p; changed = true; }
+    });
+    if (changed) renderList();
   }
 
   /* ---------- broker link report (?debug) ---------- */
@@ -605,26 +811,25 @@ require([
   const DEBUG = /[?&]debug\b/i.test(location.search);
   let diagnosed = false;
 
-  async function diagnoseBrokers(props, spaceRows, brokerRows) {
+  async function diagnoseBrokers(props, listedKeys, brokerRows, shownProps) {
     if (diagnosed || !spacesTable || !brokersTable) return;
     diagnosed = true;
     const bizKey = L.businessKey, brkKey = L.brokerKey;
 
     // Every business row, not just the vacant ones, to see what brokers point at.
     const allBiz = await loadAll(spacesTable, { where: "1=1" });
-    const statusFields = [...new Set([...CONFIG.vacantSpacesWhere.matchAll(/([A-Za-z_]\w*)\s*(?:=|<>|!=|\bIN\b|\bLIKE\b)/gi)]
+    const filters = `${CONFIG.vacantSpacesWhere} ${CONFIG.listedSpacesWhere || ""}`;
+    const statusFields = [...new Set([...filters.matchAll(/([A-Za-z_]\w*)\s*(?:=|<>|!=|\bIN\b|\bLIKE\b)/gi)]
       .map((m) => m[1]))];
 
     const bizByKey = new Map(allBiz.map((g) => [keyOf(g.attributes[bizKey]), g.attributes]));
-    const vacantKeys = new Set(spaceRows.map((g) => keyOf(g.attributes[bizKey])));
     const propKey = (g) => keyOf(val(g.attributes, F, "propertyKey"));
     const allProps = new Set(props.map(propKey));
-    const visibleProps = new Set(props.filter((g) => isShown(g.attributes)).map(propKey));
 
     const tally = {
       "Shown on the map": 0,
-      "Linked to a vacant space, but its property is filtered out": 0,
-      "Linked to a business that isn't counted as vacant": 0,
+      "Linked to a listed space, but its property is filtered out": 0,
+      "Linked to a business left out by the space filters": 0,
       "Key matches a PROPERTY's GlobalID, not a business": 0,
       "Key matches nothing": 0,
       "Key is blank": 0
@@ -638,12 +843,12 @@ require([
       const who = str(val(a, B, "name")) || str(val(a, B, "company")) || `OBJECTID ${a[brokersTable.objectIdField]}`;
       let why;
       if (!k) why = "Key is blank";
-      else if (vacantKeys.has(k)) {
+      else if (listedKeys.has(k)) {
         const prop = keyOf(val(bizByKey.get(k) || {}, S, "propertyKey"));
-        why = visibleProps.has(prop) ? "Shown on the map"
-          : "Linked to a vacant space, but its property is filtered out";
+        why = shownProps.has(prop) ? "Shown on the map"
+          : "Linked to a listed space, but its property is filtered out";
       } else if (bizByKey.has(k)) {
-        why = "Linked to a business that isn't counted as vacant";
+        why = "Linked to a business left out by the space filters";
         const b = bizByKey.get(k);
         const combo = statusFields.map((f) => `${f} = ${b[f] == null ? "(blank)" : `'${b[f]}'`}`).join(", ") || "(see table)";
         excludedStatuses.set(combo, (excludedStatuses.get(combo) || 0) + 1);
@@ -654,12 +859,12 @@ require([
     });
 
     console.group(`Broker link report: ${brokerRows.length} broker rows, ` +
-      `${allBiz.length} business rows (${spaceRows.length} counted as vacant)`);
+      `${allBiz.length} business rows (${listedKeys.size} listed)`);
     console.info(`Link used: businesses.${bizKey} = brokers.${brkKey}`);
     console.table(tally);
     if (excludedStatuses.size) {
       console.info("Businesses that have brokers but are left out by CONFIG.vacantSpacesWhere " +
-        `("${CONFIG.vacantSpacesWhere}"):`);
+        "and CONFIG.listedSpacesWhere:");
       console.table([...excludedStatuses].map(([values, brokers]) => ({ values, brokers })));
     }
     if (examples.length) {
@@ -781,10 +986,12 @@ require([
 
   function brokerHtml(b) {
     const rows = [];
-    if (b.name) rows.push(["Broker", esc(b.name)]);
     if (b.company) rows.push(["Company", esc(b.company)]);
-    if (b.phone) rows.push(["Phone", esc(b.phone)]);
-    if (b.email) rows.push(["Email", esc(b.email)]);
+    if (b.companyPhone) rows.push(["Company phone", esc(b.companyPhone)]);
+    if (b.companyEmail) rows.push(["Company email", esc(b.companyEmail)]);
+    if (b.name) rows.push(["Broker", esc(b.name)]);
+    if (b.phone) rows.push(["Broker phone", esc(b.phone)]);
+    if (b.email) rows.push(["Broker email", esc(b.email)]);
     if (b.spaceType) rows.push(["Space type", esc(b.spaceType)]);
     if (b.url) {
       rows.push(["Website", `<a href="${esc(b.url)}" target="_blank" rel="noopener">${esc(b.url.replace(/^https?:\/\//i, "").replace(/\/$/, ""))}</a>`]);
@@ -811,7 +1018,10 @@ require([
     const sub = [r.propertyName, r.hood].filter(Boolean).join(", ");
     const open = expanded.has(r.id);
     const bodyId = `details-${esc(r.id)}`;
-    return `<article class="card" data-id="${esc(r.id)}" style="--c:${t.color}"
+    const thumb = r.photo
+      ? `<span class="thumb"><img src="${esc(r.photo)}" alt="" loading="lazy" decoding="async"></span>`
+      : "";
+    return `<article class="card${r.photo ? " has-photo" : ""}" data-id="${esc(r.id)}" style="--c:${t.color}"
         aria-current="${r.id === selectedId}">
       <span class="dot" aria-hidden="true"></span>
       <div class="card-main">
@@ -820,6 +1030,7 @@ require([
         <button type="button" class="more" aria-expanded="${open}" aria-controls="${bodyId}">${open ? HIDE_LABEL : SHOW_LABEL}</button>
         <div class="more-body" id="${bodyId}" ${open ? "" : "hidden"}>${detailsHtml(r)}</div>
       </div>
+      ${thumb}
     </article>`;
   }
 
@@ -923,6 +1134,7 @@ require([
     refreshing = true;
     try {
       await load();
+      updateRenderer();
       // Forget open cards for properties that are no longer listed.
       expanded.forEach((id) => { if (!byId.has(id)) expanded.delete(id); });
       if (selectedId != null && !byId.has(selectedId)) selectedId = null;
@@ -930,6 +1142,7 @@ require([
       apply();
       layer.refresh();
       setHighlight(selectedId);
+      loadPhotos().catch((err) => console.warn("Photos couldn't be refreshed.", err));
     } catch (err) {
       console.warn("Couldn't refresh listings; keeping the current ones.", err);
     } finally {
@@ -1045,7 +1258,10 @@ require([
         outFields: ["*"],
         definitionExpression: CONFIG.where || null,
         popupEnabled: false,
-        renderer
+        // Hidden until the data loads, so properties that won't be listed
+        // never flash on the map.
+        opacity: 0,
+        renderer: { type: "simple", symbol: marker(OTHER_COLOR) }
       });
       view.map.add(layer);
 
@@ -1056,8 +1272,11 @@ require([
 
       // Load the data and the map layer at the same time.
       [layerView] = await Promise.all([view.whenLayerView(layer), load()]);
+      updateRenderer();
       buildFilterOptions();
       apply();
+      layer.opacity = 1;
+      loadPhotos().catch((err) => console.warn("Photos couldn't be loaded.", err));
       startAutoRefresh();
     } catch (err) {
       console.error(err);
